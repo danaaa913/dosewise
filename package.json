@@ -1,0 +1,16 @@
+{
+  "name": "dosewise",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c green,blue \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
+    "build": "pnpm --filter backend build && pnpm --filter frontend build",
+    "seed": "pnpm --filter backend seed",
+    "db:push": "pnpm --filter backend db:push",
+    "migrate": "pnpm --filter backend migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "~5.8.3"
+  }
+}
