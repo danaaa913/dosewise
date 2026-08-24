@@ -88,6 +88,10 @@ export const api = {
       request(`/requests/${requestId}/accept`, { method: "POST" }),
     reject: (requestId: number) =>
       request(`/requests/${requestId}/reject`, { method: "POST" }),
+    cancel: (requestId: number) =>
+      request(`/requests/${requestId}/cancel`, { method: "POST" }),
+    complete: (requestId: number) =>
+      request(`/requests/${requestId}/complete`, { method: "POST" }),
   },
   subscriptions: {
     status: () => request<SubscriptionStatus>("/subscriptions/status"),

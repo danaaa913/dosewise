@@ -7,12 +7,20 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   pending: { label: "معلق", cls: "bg-amber-100 text-amber-700" },
   accepted: { label: "مقبول", cls: "bg-emerald-100 text-emerald-700" },
   rejected: { label: "مرفوض", cls: "bg-red-100 text-red-600" },
+  cancelled: { label: "ملغى", cls: "bg-slate-200 text-slate-600" },
+  completed: { label: "مكتمل", cls: "bg-blue-100 text-blue-700" },
+  expired: { label: "منتهي", cls: "bg-slate-200 text-slate-500" },
 };
 
 export default function RequestsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"received" | "sent">("received");
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  const showFeedback = (text: string, isError = false) => {
+    setFeedback({ text, isError });
+    setTimeout(() => setFeedback(null), 3000);
+  };
 
   const { data: received, isLoading: loadingReceived } = useQuery({
     queryKey: ["requests-received"],
@@ -28,18 +36,38 @@ export default function RequestsPage() {
     mutationFn: (id: number) => api.requests.accept(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["requests-received"] });
-      setFeedback("تم قبول الطلب بنجاح");
-      setTimeout(() => setFeedback(""), 3000);
+      showFeedback("تم قبول الطلب بنجاح");
     },
+    onError: (e: Error) => showFeedback(e.message, true),
   });
 
   const rejectMut = useMutation({
     mutationFn: (id: number) => api.requests.reject(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["requests-received"] });
-      setFeedback("تم رفض الطلب");
-      setTimeout(() => setFeedback(""), 3000);
+      showFeedback("تم رفض الطلب");
     },
+    onError: (e: Error) => showFeedback(e.message, true),
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => api.requests.cancel(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["requests-sent"] });
+      qc.invalidateQueries({ queryKey: ["requests-received"] });
+      showFeedback("تم إلغاء الطلب");
+    },
+    onError: (e: Error) => showFeedback(e.message, true),
+  });
+
+  const completeMut = useMutation({
+    mutationFn: (id: number) => api.requests.complete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["requests-sent"] });
+      qc.invalidateQueries({ queryKey: ["requests-received"] });
+      showFeedback("تم تأكيد الاستلام — اكتمل الطلب 🎉");
+    },
+    onError: (e: Error) => showFeedback(e.message, true),
   });
 
   const requests: ExchangeRequest[] = tab === "received" ? (received ?? []) : (sent ?? []);
@@ -50,8 +78,14 @@ export default function RequestsPage() {
   return (
     <Layout title="الطلبات">
       {feedback && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-          {feedback}
+        <div
+          className={`mb-4 p-3 border rounded-lg text-sm ${
+            feedback.isError
+              ? "bg-red-50 border-red-200 text-red-700"
+              : "bg-emerald-50 border-emerald-200 text-emerald-700"
+          }`}
+        >
+          {feedback.text}
         </div>
       )}
 
@@ -142,6 +176,30 @@ export default function RequestsPage() {
                         className="border border-red-300 text-red-600 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-60 transition-colors"
                       >
                         رفض
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Actions for sent requests */}
+                  {tab === "sent" && req.status === "pending" && (
+                    <div className="flex gap-2 mr-4 flex-shrink-0">
+                      <button
+                        onClick={() => cancelMut.mutate(req.id)}
+                        disabled={cancelMut.isPending}
+                        className="border border-slate-300 text-slate-600 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+                      >
+                        إلغاء الطلب
+                      </button>
+                    </div>
+                  )}
+                  {tab === "sent" && req.status === "accepted" && (
+                    <div className="flex gap-2 mr-4 flex-shrink-0">
+                      <button
+                        onClick={() => completeMut.mutate(req.id)}
+                        disabled={completeMut.isPending}
+                        className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                      >
+                        تأكيد الاستلام
                       </button>
                     </div>
                   )}
