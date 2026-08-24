@@ -1,8 +1,9 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable } from "../db/index.js";
 import { eq, count } from "drizzle-orm";
 import { AdminLoginBody } from "../zod/schemas.js";
+import { loginLimiter } from "../lib/rate-limit.js";
 
 const router: IRouter = Router();
 
@@ -13,16 +14,16 @@ function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
-router.post("/admin/login", async (req, res): Promise<void> => {
+router.post("/admin/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = AdminLoginBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { email, password } = parsed.data;
   const [admin] = await db.select().from(adminsTable).where(eq(adminsTable.email, email));
-  if (!admin) { res.status(401).json({ error: "بيانات الدخول غير صحيحة" }); return; }
+  if (!admin) { res.status(401).json({ error: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" }); return; }
 
   const valid = await bcrypt.compare(password, admin.passwordHash);
-  if (!valid) { res.status(401).json({ error: "بيانات الدخول غير صحيحة" }); return; }
+  if (!valid) { res.status(401).json({ error: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" }); return; }
 
   req.session.adminId = admin.id;
   req.session.isAdmin = true;

@@ -4,6 +4,7 @@ import { db, pharmaciesTable } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { RegisterPharmacyBody, LoginPharmacyBody } from "../zod/schemas.js";
 import { SESSION_COOKIE_NAME } from "../app.js";
+import { loginLimiter } from "../lib/rate-limit.js";
 
 const router: IRouter = Router();
 
@@ -46,7 +47,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   });
 });
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginPharmacyBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 

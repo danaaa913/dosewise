@@ -5,6 +5,7 @@ import session from "express-session";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { noCache } from "./middlewares/no-cache.js";
+import { allowedOrigins, isOriginAllowed, apiLimiter } from "./lib/rate-limit.js";
 
 export const SESSION_COOKIE_NAME = "dosewise.sid";
 
@@ -34,7 +35,23 @@ app.use(
   }),
 );
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, isOriginAllowed(origin));
+    },
+    credentials: true,
+  }),
+);
+
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && !isOriginAllowed(req.headers.origin)) {
+    res.status(403).json({ error: "Cross-origin request rejected" });
+    return;
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -47,11 +64,12 @@ app.use(
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
 );
 
-app.use("/api", noCache, router);
+app.use("/api", apiLimiter, noCache, router);
 
 export default app;
