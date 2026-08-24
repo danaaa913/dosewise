@@ -1,4 +1,5 @@
-﻿import { Link, useLocation } from "wouter";
+﻿import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -26,22 +27,206 @@ interface LayoutProps {
   title: string;
 }
 
-export function Layout({ children, title }: LayoutProps) {
-  const [location] = useLocation();
-  const { pharmacy, logout } = useAuth();
-  const { lang, setLang, t } = useLanguage();
-
-  const { data: notifData } = useQuery({
+function useUnreadCount() {
+  const { data } = useQuery({
     queryKey: ["notifications-count"],
     queryFn: () => api.notifications.my(),
     refetchInterval: 30000,
   });
+  return data?.unreadCount ?? 0;
+}
 
-  const unreadCount = notifData?.unreadCount ?? 0;
+function LangToggle({ dark = false }: { dark?: boolean }) {
+  const { lang, setLang } = useLanguage();
+  return (
+    <button
+      onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+      className={cn(
+        "flex items-center justify-center gap-2 text-sm rounded-lg py-2 px-3 min-h-[44px] border transition-colors",
+        dark
+          ? "text-white/80 border-white/20 hover:bg-white/10"
+          : "text-[#1b3a5f] border-slate-200 hover:bg-[#eef5f5]"
+      )}
+      aria-label={lang === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+    >
+      🌐 {lang === "ar" ? "English" : "العربية"}
+    </button>
+  );
+}
+
+function NavContent({
+  collapsed = false,
+  onNavigate,
+}: {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
+  const [location] = useLocation();
+  const { pharmacy, logout } = useAuth();
+  const { t } = useLanguage();
+  const unreadCount = useUnreadCount();
+
+  const linkCls = (active: boolean) =>
+    cn(
+      "flex items-center rounded-lg text-sm transition-colors relative",
+      collapsed ? "justify-center mx-2 my-0.5 p-3 min-h-[44px] min-w-[44px]" : "gap-3 px-3 py-2.5 mx-2 my-0.5 min-h-[44px]",
+      active
+        ? "bg-[#1b3a5f] text-white font-medium shadow-sm"
+        : "text-slate-600 hover:bg-[#eef5f5] hover:text-[#1b3a5f]"
+    );
+
+  return (
+    <>
+      {pharmacy && !collapsed && (
+        <div className="mx-3 my-3 p-3 bg-gradient-to-br from-[#1b3a5f] to-[#2a5f66] rounded-xl text-white">
+          <p className="text-xs font-semibold truncate">{pharmacy.name}</p>
+          <p className="text-[11px] text-white/70 truncate mt-0.5">{pharmacy.city}</p>
+        </div>
+      )}
+
+      <nav className={cn("py-2 overflow-y-auto", collapsed ? "flex-1" : "flex-1")}>
+        {NAV_ITEMS.map((item) => {
+          const active = location === item.href || location.startsWith(item.href + "/");
+          const isNotif = item.href === "/notifications";
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              title={collapsed ? t.nav[item.key] : undefined}
+              className={linkCls(active)}
+            >
+              <NavIcon name={item.href} active={active} />
+              {!collapsed && <span>{t.nav[item.key]}</span>}
+              {isNotif && unreadCount > 0 && (
+                <span
+                  className={cn(
+                    "text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0",
+                    collapsed ? "absolute top-1 end-1" : "ms-auto",
+                    active ? "bg-white text-[#1b3a5f]" : "bg-[#3f8b8e] text-white"
+                  )}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+
+        <div className="my-3 mx-4 border-t border-slate-100" />
+
+        {SECONDARY_NAV.map((item) => {
+          const active = location === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              title={collapsed ? t.nav[item.key] : undefined}
+              className={linkCls(active)}
+            >
+              <SecondaryIcon name={item.href} active={active} />
+              {!collapsed && <span>{t.nav[item.key]}</span>}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className={cn("border-t border-slate-100", collapsed ? "p-2" : "p-3")}>
+        {!collapsed && (
+          <div className="mb-2">
+            <LangToggle />
+          </div>
+        )}
+        <button
+          onClick={logout}
+          title={t.logout}
+          className={cn(
+            "text-sm text-slate-500 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors min-h-[44px]",
+            collapsed ? "w-full flex items-center justify-center p-3" : "w-full text-start py-2 px-3"
+          )}
+        >
+          <span className="inline-flex items-center gap-2">
+            <LogoutIcon />
+            {!collapsed && t.logout}
+          </span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function Layout({ children, title }: LayoutProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { t } = useLanguage();
 
   return (
     <div className="flex min-h-screen bg-[#f6fafa]" dir={t.dir}>
-      <aside className="w-64 bg-white border-e border-slate-200 flex flex-col shadow-sm flex-shrink-0">
+      {/* Mobile top bar */}
+      <header className="fixed top-0 inset-x-0 z-30 md:hidden bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="p-2.5 -ms-2.5 text-[#1b3a5f] min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-[#eef5f5]"
+          aria-label="Open menu"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <Logo size={30} />
+          <span className="font-bold text-[#1b3a5f] text-sm">DoseWise</span>
+        </Link>
+        <span className="w-11" aria-hidden="true" />
+      </header>
+
+      {/* Drawer overlay (mobile) */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed top-0 bottom-0 start-0 z-50 w-72 bg-white flex flex-col shadow-xl transition-transform duration-200 md:hidden",
+          drawerOpen ? "translate-x-0" : "rtl:translate-x-full ltr:-translate-x-full"
+        )}
+      >
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <Logo size={36} />
+            <div>
+              <h1 className="text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</h1>
+              <p className="text-[11px] text-slate-400">{t.tagline}</p>
+            </div>
+          </Link>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="p-2.5 text-slate-400 hover:text-slate-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <NavContent onNavigate={() => setDrawerOpen(false)} />
+      </aside>
+
+      {/* Tablet: icon sidebar */}
+      <aside className="hidden md:flex lg:hidden flex-col w-16 bg-white border-e border-slate-200 flex-shrink-0 sticky top-0 h-screen">
+        <div className="py-4 flex justify-center border-b border-slate-100">
+          <Link href="/dashboard" aria-label="DoseWise">
+            <Logo size={32} />
+          </Link>
+        </div>
+        <NavContent collapsed />
+      </aside>
+
+      {/* Desktop: full sidebar */}
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-e border-slate-200 flex-shrink-0 sticky top-0 h-screen">
         <div className="px-5 py-5 border-b border-slate-100">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <Logo size={40} />
@@ -51,90 +236,27 @@ export function Layout({ children, title }: LayoutProps) {
             </div>
           </Link>
         </div>
-
-        {pharmacy && (
-          <div className="mx-3 my-3 p-3 bg-gradient-to-br from-[#1b3a5f] to-[#2a5f66] rounded-xl text-white">
-            <p className="text-xs font-semibold truncate">{pharmacy.name}</p>
-            <p className="text-[11px] text-white/70 truncate mt-0.5">{pharmacy.city}</p>
-          </div>
-        )}
-
-        <nav className="flex-1 py-2 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
-            const active = location === item.href || location.startsWith(item.href + "/");
-            const isNotif = item.href === "/notifications";
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-lg text-sm transition-colors relative",
-                  active
-                    ? "bg-[#1b3a5f] text-white font-medium shadow-sm"
-                    : "text-slate-600 hover:bg-[#eef5f5] hover:text-[#1b3a5f]"
-                )}
-              >
-                <NavIcon name={item.href} active={active} />
-                <span>{t.nav[item.key]}</span>
-                {isNotif && unreadCount > 0 && (
-                  <span
-                    className={cn(
-                      "ms-auto text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center",
-                      active ? "bg-white text-[#1b3a5f]" : "bg-[#3f8b8e] text-white"
-                    )}
-                  >
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-
-          <div className="my-3 mx-4 border-t border-slate-100" />
-
-          {SECONDARY_NAV.map((item) => {
-            const active = location === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-lg text-sm transition-colors",
-                  active
-                    ? "bg-[#1b3a5f] text-white font-medium shadow-sm"
-                    : "text-slate-600 hover:bg-[#eef5f5] hover:text-[#1b3a5f]"
-                )}
-              >
-                <SecondaryIcon name={item.href} active={active} />
-                <span>{t.nav[item.key]}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-slate-100">
-          <button
-            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="w-full flex items-center justify-center gap-2 text-sm text-[#1b3a5f] border border-slate-200 rounded-lg py-2 mb-2 hover:bg-[#eef5f5] transition-colors"
-          >
-            ðŸŒ {lang === "ar" ? "English" : "Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©"}
-          </button>
-          <button
-            onClick={logout}
-            className="w-full text-sm text-slate-500 hover:text-red-600 text-start py-2 px-3 rounded-lg hover:bg-red-50 transition-colors"
-          >
-            {t.logout}
-          </button>
-        </div>
+        <NavContent />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-slate-200 px-8 py-4">
+        {/* Desktop/tablet header */}
+        <header className="hidden md:block bg-white border-b border-slate-200 px-4 sm:px-8 py-4 sticky top-0 z-20">
           <h2 className="text-lg font-semibold text-[#1b3a5f]">{title}</h2>
         </header>
-        <main className="flex-1 p-8 overflow-y-auto">{children}</main>
+        <main className="flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 overflow-x-hidden pt-[72px] md:pt-0">
+          {children}
+        </main>
       </div>
     </div>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+    </svg>
   );
 }
 
@@ -205,6 +327,7 @@ function SecondaryIcon({ name, active }: { name: string; active: boolean }) {
 export function AdminLayout({ children, title }: LayoutProps) {
   const [location] = useLocation();
   const { t } = useLanguage();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const ADMIN_NAV = [
     { href: "/admin/dashboard", key: "dashboard" },
@@ -217,9 +340,86 @@ export function AdminLayout({ children, title }: LayoutProps) {
     window.location.href = "/admin";
   };
 
+  const navLinks = (collapsed = false, onNavigate?: () => void) =>
+    ADMIN_NAV.map((item) => {
+      const active = location === item.href;
+      return (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={onNavigate}
+          title={collapsed ? t.nav[item.key] : undefined}
+          className={cn(
+            "flex items-center text-sm transition-colors min-h-[44px]",
+            collapsed ? "justify-center px-3" : "px-5 py-2.5",
+            active
+              ? "bg-[#3f8b8e] text-white border-s-4 border-[#82bec1]"
+              : "text-white/70 hover:bg-white/10 hover:text-white"
+          )}
+        >
+          {t.nav[item.key]}
+        </Link>
+      );
+    });
+
   return (
     <div className="flex min-h-screen bg-[#f6fafa]" dir={t.dir}>
-      <aside className="w-60 bg-gradient-to-b from-[#0e1f33] to-[#1b3a5f] flex flex-col flex-shrink-0">
+      <header className="fixed top-0 inset-x-0 z-30 md:hidden bg-[#0e1f33] h-14 flex items-center justify-between px-4">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="p-2.5 text-white min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-white/10"
+          aria-label="Open menu"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <span className="text-white text-sm font-bold">DoseWise — {t.adminTagline}</span>
+        <span className="w-11" aria-hidden="true" />
+      </header>
+
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed top-0 bottom-0 start-0 z-50 w-64 bg-gradient-to-b from-[#0e1f33] to-[#1b3a5f] flex flex-col shadow-xl transition-transform duration-200 md:hidden",
+          drawerOpen ? "translate-x-0" : "rtl:translate-x-full ltr:-translate-x-full"
+        )}
+      >
+        <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-white rounded-xl p-1">
+              <Logo size={28} />
+            </div>
+            <span className="text-sm font-bold text-white">{t.adminTagline}</span>
+          </div>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="p-2.5 text-white/60 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <nav className="flex-1 py-4">{navLinks(false, () => setDrawerOpen(false))}</nav>
+        <div className="p-4 border-t border-white/10">
+          <button
+            onClick={handleLogout}
+            className="w-full text-sm text-white/60 hover:text-white text-start py-2 px-3 rounded-lg hover:bg-white/10 transition-colors min-h-[44px]"
+          >
+            {t.logout}
+          </button>
+        </div>
+      </aside>
+
+      <aside className="hidden md:flex flex-col w-60 bg-gradient-to-b from-[#0e1f33] to-[#1b3a5f] flex-shrink-0 sticky top-0 h-screen">
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="bg-white rounded-xl p-1">
@@ -231,39 +431,24 @@ export function AdminLayout({ children, title }: LayoutProps) {
             </div>
           </div>
         </div>
-        <nav className="flex-1 py-4">
-          {ADMIN_NAV.map((item) => {
-            const active = location === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center px-5 py-2.5 text-sm transition-colors",
-                  active
-                    ? "bg-[#3f8b8e] text-white border-s-4 border-[#82bec1]"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
-                )}
-              >
-                {t.nav[item.key]}
-              </Link>
-            );
-          })}
-        </nav>
+        <nav className="flex-1 py-4">{navLinks()}</nav>
         <div className="p-4 border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="w-full text-sm text-white/60 hover:text-white text-start py-2 px-3 rounded-lg hover:bg-white/10 transition-colors"
+            className="w-full text-sm text-white/60 hover:text-white text-start py-2 px-3 rounded-lg hover:bg-white/10 transition-colors min-h-[44px]"
           >
             {t.logout}
           </button>
         </div>
       </aside>
+
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-slate-200 px-8 py-4">
+        <header className="hidden md:block bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-20">
           <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
         </header>
-        <main className="flex-1 p-8 overflow-y-auto">{children}</main>
+        <main className="flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 overflow-x-hidden pt-[72px] md:pt-0">
+          {children}
+        </main>
       </div>
     </div>
   );

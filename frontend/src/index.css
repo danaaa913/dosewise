@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -8,6 +9,8 @@
  * Map Tailwind's `emerald-*` ramp to a navy/teal palette so existing utility
  * classes pick up the brand without touching every component. */
 @theme {
+  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+
   --color-emerald-50: #eff6f6;
   --color-emerald-100: #d6ebec;
   --color-emerald-200: #b0d8da;
@@ -26,6 +29,16 @@
   --color-brand-teal-deep: #2a5f66;
   --color-brand-teal-soft: #d6ebec;
   --color-brand-bg: #f6fafa;
+
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 42 66 / 0.05), 0 1px 3px 0 rgb(15 42 66 / 0.06);
+  --shadow-drawer: -4px 0 24px rgb(15 42 66 / 0.18);
 }
 
 @theme inline {
