@@ -2,6 +2,9 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { noCache } from "./middlewares/no-cache.js";
@@ -71,5 +74,21 @@ app.use(
 );
 
 app.use("/api", apiLimiter, noCache, router);
+
+if (process.env.NODE_ENV === "production") {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const frontendDist = [resolve(here, "../../frontend/dist"), resolve(here, "../../../frontend/dist")]
+    .find((candidate) => existsSync(join(candidate, "index.html")));
+
+  if (frontendDist) {
+    logger.info({ frontendDist }, "Serving frontend static files");
+    app.use(express.static(frontendDist));
+    app.get(/^\/(?!api\/).*/, (_req, res) => {
+      res.sendFile(join(frontendDist, "index.html"));
+    });
+  } else {
+    logger.warn("NODE_ENV is production but frontend/dist was not found — API only.");
+  }
+}
 
 export default app;
