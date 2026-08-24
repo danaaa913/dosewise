@@ -20,10 +20,12 @@ const PLANS = [
     features: ["جميع مميزات الخطة الشهرية", "خصم 20%", "دعم ذو أولوية", "تقارير شهرية مفصلة"] },
 ];
 
+const DEMO_PAYMENT_ENABLED = (process.env.DEMO_PAYMENT ?? "true") !== "false";
+
 router.get("/subscriptions/status", requirePharmacy, async (req, res): Promise<void> => {
   const [pharmacy] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   if (!pharmacy.isSubscribed) {
-    res.json({ isSubscribed: false, plan: null, startDate: null, endDate: null, daysRemaining: null }); return;
+    res.json({ isSubscribed: false, plan: null, startDate: null, endDate: null, daysRemaining: null, demoMode: DEMO_PAYMENT_ENABLED }); return;
   }
   const now = new Date();
   const endDate = pharmacy.subscriptionEndDate;
@@ -32,18 +34,26 @@ router.get("/subscriptions/status", requirePharmacy, async (req, res): Promise<v
     isSubscribed: pharmacy.isSubscribed, plan: pharmacy.subscriptionPlan ?? null,
     startDate: pharmacy.subscriptionStartDate ? pharmacy.subscriptionStartDate.toISOString() : null,
     endDate: endDate ? endDate.toISOString() : null, daysRemaining,
+    demoMode: DEMO_PAYMENT_ENABLED,
   });
 });
 
 router.get("/subscriptions/plans", async (_req, res): Promise<void> => {
-  res.json(PLANS);
+  res.json({ demoMode: DEMO_PAYMENT_ENABLED, plans: PLANS });
 });
 
 router.post("/subscriptions/payment", requirePharmacy, async (req, res): Promise<void> => {
+  if (!DEMO_PAYMENT_ENABLED) {
+    res.status(403).json({ error: "Real payments are not enabled yet. Subscriptions are in demo mode only." }); return;
+  }
+
   const parsed = ProcessPaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { planId } = parsed.data;
+  if (parsed.data.cardNumber || parsed.data.cvv || parsed.data.expiryMonth || parsed.data.expiryYear) {
+    res.status(400).json({ error: "لا تُدخل بيانات بطاقة حقيقية — الدفع في وضع تجريبي ولا تُخزن تفاصيل البطاقات إطلاقاً" }); return;
+  }
   const plan = PLANS.find(p => p.id === planId);
   if (!plan) { res.status(400).json({ error: "Invalid plan" }); return; }
 

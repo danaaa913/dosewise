@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+﻿const API_BASE = "/api";
 
 export function formatPrice(value: string | number): string {
   return Number(value).toFixed(2);
@@ -95,7 +95,7 @@ export const api = {
   },
   subscriptions: {
     status: () => request<SubscriptionStatus>("/subscriptions/status"),
-    plans: () => request<Plan[]>("/subscriptions/plans"),
+    plans: () => request<{ demoMode: boolean; plans: Plan[] }>("/subscriptions/plans"),
     payment: (planId: string) =>
       request("/subscriptions/payment", {
         method: "POST",

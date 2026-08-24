@@ -60,6 +60,11 @@ export default function SubscriptionsPage() {
 
   return (
     <Layout title="الاشتراكات">
+      {plans?.demoMode && (
+        <div className="mb-5 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
+          <span className="font-bold">⚠️ وضع تجريبي:</span> المدفوعات حالياً محاكاة فقط لأغراض العرض. لا تُدخل بيانات بطاقة حقيقية — لن تُقبل ولن تُخزن.
+        </div>
+      )}
       {feedback && (
         <div className="mb-5 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
           {feedback}
@@ -109,7 +114,7 @@ export default function SubscriptionsPage() {
         <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {(plans ?? []).map((plan: Plan) => {
+          {(plans?.plans ?? []).map((plan: Plan) => {
             const colors = planColorMap[plan.id] ?? planColorMap.free;
             const isCurrent = status?.plan === plan.id && status.isSubscribed;
             return (

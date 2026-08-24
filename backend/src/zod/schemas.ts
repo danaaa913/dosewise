@@ -2,19 +2,23 @@ import * as zod from "zod/v4";
 
 export const HealthCheckResponse = zod.object({ status: zod.string() });
 
+export const jordanPhone = zod
+  .string()
+  .regex(/^(\+962|00962|0)?7[789]\d{7}$/, "Invalid Jordanian phone number");
+
 export const RegisterPharmacyBody = zod.object({
-  name: zod.string(),
-  managerName: zod.string(),
-  email: zod.string(),
-  phone: zod.string(),
-  city: zod.string(),
-  address: zod.string(),
-  password: zod.string(),
+  name: zod.string().min(2).max(120),
+  managerName: zod.string().min(2).max(120),
+  email: zod.string().email().max(200),
+  phone: jordanPhone,
+  city: zod.string().min(2).max(80),
+  address: zod.string().min(5).max(300),
+  password: zod.string().min(12).max(128),
 });
 
 export const LoginPharmacyBody = zod.object({
-  email: zod.string(),
-  password: zod.string(),
+  email: zod.string().email(),
+  password: zod.string().min(1),
 });
 
 export const AdminLoginBody = zod.object({
