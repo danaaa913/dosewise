@@ -1,7 +1,7 @@
 ﻿import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { api } from "@/lib/api";
+import { api, formatPrice } from "@/lib/api";
 
 type AiTab = "recommendations" | "suggestions" | "prices" | "forecast" | "chat";
 
