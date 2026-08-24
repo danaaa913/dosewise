@@ -1,6 +1,6 @@
-import { pgTable, pgEnum, text, serial, integer, numeric, uniqueIndex, timestamp } from "drizzle-orm/pg-core";
+﻿import { pgTable, pgEnum, text, serial, integer, numeric, uniqueIndex, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { pharmaciesTable } from "./pharmacies.js";
 import { medicinesTable } from "./medicines.js";
 

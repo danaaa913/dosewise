@@ -1,4 +1,4 @@
-import * as zod from "zod";
+import * as zod from "zod/v4";
 
 export const HealthCheckResponse = zod.object({ status: zod.string() });
 

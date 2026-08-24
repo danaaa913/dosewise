@@ -1,6 +1,6 @@
-import { pgTable, text, serial, integer, numeric, boolean, timestamp, date } from "drizzle-orm/pg-core";
+﻿import { pgTable, text, serial, integer, numeric, boolean, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { pharmaciesTable } from "./pharmacies.js";
 
 export const medicinesTable = pgTable("medicines", {
