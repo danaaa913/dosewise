@@ -1,0 +1,58 @@
+export type Lang = "ar" | "en";
+
+export const translations = {
+  ar: {
+    dir: "rtl" as const,
+    tagline: "منصة تبادل الأدوية",
+    adminTagline: "لوحة الإدارة",
+    loading: "جاري التحميل...",
+    logout: "تسجيل الخروج",
+    welcomeTitle: "مرحباً بك في DoseWise",
+    welcomeSubtitle: "اختر لغة المنصة المفضلة — يمكنك تغييرها في أي وقت",
+    chooseArabic: "العربية",
+    chooseArabicSub: "المتابعة باللغة العربية",
+    chooseEnglish: "English",
+    chooseEnglishSub: "Continue in English",
+    nav: {
+      dashboard: "لوحة التحكم",
+      myMedicines: "أدويتي",
+      browse: "تصفح الأدوية",
+      requests: "الطلبات",
+      subscriptions: "الاشتراكات",
+      notifications: "الإشعارات",
+      ai: "الذكاء الاصطناعي",
+      about: "عن المنصة",
+      contact: "تواصل معنا",
+      pharmacies: "الصيدليات",
+      medicines: "الأدوية",
+    },
+  },
+  en: {
+    dir: "ltr" as const,
+    tagline: "Medicine Exchange Platform",
+    adminTagline: "Admin Panel",
+    loading: "Loading...",
+    logout: "Log out",
+    welcomeTitle: "Welcome to DoseWise",
+    welcomeSubtitle: "Choose your preferred language — you can change it anytime",
+    chooseArabic: "العربية",
+    chooseArabicSub: "المتابعة باللغة العربية",
+    chooseEnglish: "English",
+    chooseEnglishSub: "Continue in English",
+    nav: {
+      dashboard: "Dashboard",
+      myMedicines: "My Medicines",
+      browse: "Browse Medicines",
+      requests: "Requests",
+      subscriptions: "Subscriptions",
+      notifications: "Notifications",
+      ai: "AI Insights",
+      about: "About",
+      contact: "Contact Us",
+      pharmacies: "Pharmacies",
+      medicines: "Medicines",
+    },
+  },
+} as const;
+
+export type Translations = (typeof translations)[Lang];

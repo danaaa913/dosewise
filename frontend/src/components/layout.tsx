@@ -4,21 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Logo } from "./Logo";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "لوحة التحكم" },
-  { href: "/my-medicines", label: "أدويتي" },
-  { href: "/browse", label: "تصفح الأدوية" },
-  { href: "/requests", label: "الطلبات" },
-  { href: "/subscriptions", label: "الاشتراكات" },
-  { href: "/notifications", label: "الإشعارات" },
-  { href: "/ai", label: "الذكاء الاصطناعي" },
-];
+  { href: "/dashboard", key: "dashboard" },
+  { href: "/my-medicines", key: "myMedicines" },
+  { href: "/browse", key: "browse" },
+  { href: "/requests", key: "requests" },
+  { href: "/subscriptions", key: "subscriptions" },
+  { href: "/notifications", key: "notifications" },
+  { href: "/ai", key: "ai" },
+] as const;
 
 const SECONDARY_NAV = [
-  { href: "/about", label: "عن المنصة" },
-  { href: "/contact", label: "تواصل معنا" },
-];
+  { href: "/about", key: "about" },
+  { href: "/contact", key: "contact" },
+] as const;
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -28,6 +29,7 @@ interface LayoutProps {
 export function Layout({ children, title }: LayoutProps) {
   const [location] = useLocation();
   const { pharmacy, logout } = useAuth();
+  const { lang, setLang, t } = useLanguage();
 
   const { data: notifData } = useQuery({
     queryKey: ["notifications-count"],
@@ -38,14 +40,14 @@ export function Layout({ children, title }: LayoutProps) {
   const unreadCount = notifData?.unreadCount ?? 0;
 
   return (
-    <div className="flex min-h-screen bg-[#f6fafa]" dir="rtl">
-      <aside className="w-64 bg-white border-l border-slate-200 flex flex-col shadow-sm flex-shrink-0">
+    <div className="flex min-h-screen bg-[#f6fafa]" dir={t.dir}>
+      <aside className="w-64 bg-white border-e border-slate-200 flex flex-col shadow-sm flex-shrink-0">
         <div className="px-5 py-5 border-b border-slate-100">
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <Logo size={40} />
             <div>
               <h1 className="text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</h1>
-              <p className="text-[11px] text-slate-400">منصة تبادل الأدوية</p>
+              <p className="text-[11px] text-slate-400">{t.tagline}</p>
             </div>
           </Link>
         </div>
@@ -73,11 +75,11 @@ export function Layout({ children, title }: LayoutProps) {
                 )}
               >
                 <NavIcon name={item.href} active={active} />
-                <span>{item.label}</span>
+                <span>{t.nav[item.key]}</span>
                 {isNotif && unreadCount > 0 && (
                   <span
                     className={cn(
-                      "mr-auto text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center",
+                      "ms-auto text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center",
                       active ? "bg-white text-[#1b3a5f]" : "bg-[#3f8b8e] text-white"
                     )}
                   >
@@ -104,7 +106,7 @@ export function Layout({ children, title }: LayoutProps) {
                 )}
               >
                 <SecondaryIcon name={item.href} active={active} />
-                <span>{item.label}</span>
+                <span>{t.nav[item.key]}</span>
               </Link>
             );
           })}
@@ -112,10 +114,16 @@ export function Layout({ children, title }: LayoutProps) {
 
         <div className="p-3 border-t border-slate-100">
           <button
-            onClick={logout}
-            className="w-full text-sm text-slate-500 hover:text-red-600 text-right py-2 px-3 rounded-lg hover:bg-red-50 transition-colors"
+            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+            className="w-full flex items-center justify-center gap-2 text-sm text-[#1b3a5f] border border-slate-200 rounded-lg py-2 mb-2 hover:bg-[#eef5f5] transition-colors"
           >
-            تسجيل الخروج
+            🌐 {lang === "ar" ? "English" : "العربية"}
+          </button>
+          <button
+            onClick={logout}
+            className="w-full text-sm text-slate-500 hover:text-red-600 text-start py-2 px-3 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            {t.logout}
           </button>
         </div>
       </aside>
@@ -196,12 +204,13 @@ function SecondaryIcon({ name, active }: { name: string; active: boolean }) {
 
 export function AdminLayout({ children, title }: LayoutProps) {
   const [location] = useLocation();
+  const { t } = useLanguage();
 
   const ADMIN_NAV = [
-    { href: "/admin/dashboard", label: "لوحة التحكم" },
-    { href: "/admin/pharmacies", label: "الصيدليات" },
-    { href: "/admin/medicines", label: "الأدوية" },
-  ];
+    { href: "/admin/dashboard", key: "dashboard" },
+    { href: "/admin/pharmacies", key: "pharmacies" },
+    { href: "/admin/medicines", key: "medicines" },
+  ] as const;
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -209,7 +218,7 @@ export function AdminLayout({ children, title }: LayoutProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f6fafa]" dir="rtl">
+    <div className="flex min-h-screen bg-[#f6fafa]" dir={t.dir}>
       <aside className="w-60 bg-gradient-to-b from-[#0e1f33] to-[#1b3a5f] flex flex-col flex-shrink-0">
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -218,7 +227,7 @@ export function AdminLayout({ children, title }: LayoutProps) {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white">DoseWise</h1>
-              <p className="text-xs text-white/60">لوحة الإدارة</p>
+              <p className="text-xs text-white/60">{t.adminTagline}</p>
             </div>
           </div>
         </div>
@@ -232,11 +241,11 @@ export function AdminLayout({ children, title }: LayoutProps) {
                 className={cn(
                   "flex items-center px-5 py-2.5 text-sm transition-colors",
                   active
-                    ? "bg-[#3f8b8e] text-white border-r-4 border-[#82bec1]"
+                    ? "bg-[#3f8b8e] text-white border-s-4 border-[#82bec1]"
                     : "text-white/70 hover:bg-white/10 hover:text-white"
                 )}
               >
-                {item.label}
+                {t.nav[item.key]}
               </Link>
             );
           })}
@@ -244,9 +253,9 @@ export function AdminLayout({ children, title }: LayoutProps) {
         <div className="p-4 border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="w-full text-sm text-white/60 hover:text-white text-right py-2 px-3 rounded-lg hover:bg-white/10 transition-colors"
+            className="w-full text-sm text-white/60 hover:text-white text-start py-2 px-3 rounded-lg hover:bg-white/10 transition-colors"
           >
-            تسجيل الخروج
+            {t.logout}
           </button>
         </div>
       </aside>
