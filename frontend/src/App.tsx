@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
+﻿import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,7 +14,7 @@ import BrowsePage from "@/pages/browse";
 import RequestsPage from "@/pages/requests";
 import SubscriptionsPage from "@/pages/subscriptions";
 import NotificationsPage from "@/pages/notifications";
-import AiPage from "@/pages/ai";
+import AnalyticsPage from "@/pages/analytics";
 import AboutPage from "@/pages/about";
 import ContactPage from "@/pages/contact";
 import AdminLoginPage from "@/pages/admin/login";
@@ -34,7 +34,7 @@ function LoadingScreen() {
         <div className="inline-block animate-pulse mb-4">
           <Logo size={48} />
         </div>
-        <p className="text-sm text-slate-500">جاري التحميل...</p>
+        <p className="text-sm text-slate-500">Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„...</p>
       </div>
     </div>
   );
@@ -74,7 +74,8 @@ function Router() {
       <Route path="/requests" component={() => <PharmacyRoute component={RequestsPage} />} />
       <Route path="/subscriptions" component={() => <PharmacyRoute component={SubscriptionsPage} />} />
       <Route path="/notifications" component={() => <PharmacyRoute component={NotificationsPage} />} />
-      <Route path="/ai" component={() => <PharmacyRoute component={AiPage} />} />
+      <Route path="/analytics" component={() => <PharmacyRoute component={AnalyticsPage} />} />
+      <Route path="/ai" component={() => <Redirect to="/analytics" replace />} />
       <Route path="/about" component={() => <PharmacyRoute component={AboutPage} />} />
       <Route path="/contact" component={() => <PharmacyRoute component={ContactPage} />} />
       <Route path="/admin" component={AdminLoginPage} />

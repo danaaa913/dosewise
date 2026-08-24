@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -34,30 +34,30 @@ export default function DashboardPage() {
 
   const stats = [
     {
-      label: "أدويتي",
+      label: "Ø£Ø¯ÙˆÙŠØªÙŠ",
       value: medicines?.length ?? 0,
-      sub: `${medicines?.filter((m) => m.isAvailable).length ?? 0} متاحة`,
+      sub: `${medicines?.filter((m) => m.isAvailable).length ?? 0} Ù…ØªØ§Ø­Ø©`,
       href: "/my-medicines",
       color: "emerald",
     },
     {
-      label: "طلبات أرسلتها",
+      label: "Ø·Ù„Ø¨Ø§Øª Ø£Ø±Ø³Ù„ØªÙ‡Ø§",
       value: sentRequests?.length ?? 0,
-      sub: `${sentRequests?.filter((r) => r.status === "pending").length ?? 0} معلقة`,
+      sub: `${sentRequests?.filter((r) => r.status === "pending").length ?? 0} Ù…Ø¹Ù„Ù‚Ø©`,
       href: "/requests",
       color: "blue",
     },
     {
-      label: "طلبات واردة",
+      label: "Ø·Ù„Ø¨Ø§Øª ÙˆØ§Ø±Ø¯Ø©",
       value: receivedRequests?.length ?? 0,
-      sub: `${receivedRequests?.filter((r) => r.status === "pending").length ?? 0} تحتاج ردًا`,
+      sub: `${receivedRequests?.filter((r) => r.status === "pending").length ?? 0} ØªØ­ØªØ§Ø¬ Ø±Ø¯Ù‹Ø§`,
       href: "/requests",
       color: "amber",
     },
     {
-      label: "إشعارات غير مقروءة",
+      label: "Ø¥Ø´Ø¹Ø§Ø±Ø§Øª ØºÙŠØ± Ù…Ù‚Ø±ÙˆØ¡Ø©",
       value: notifData?.unreadCount ?? 0,
-      sub: "اضغط للعرض",
+      sub: "Ø§Ø¶ØºØ· Ù„Ù„Ø¹Ø±Ø¶",
       href: "/notifications",
       color: "violet",
     },
@@ -79,23 +79,23 @@ export default function DashboardPage() {
   const pendingReceived = receivedRequests?.filter((r) => r.status === "pending") ?? [];
 
   return (
-    <Layout title="لوحة التحكم">
+    <Layout title="Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…">
       <div className="mb-6">
-        <h3 className="text-xl font-semibold text-slate-800">مرحباً، {pharmacy?.name}</h3>
-        <p className="text-sm text-slate-500 mt-1">إليك ملخص نشاط صيدليتك</p>
+        <h3 className="text-xl font-semibold text-slate-800">Ù…Ø±Ø­Ø¨Ø§Ù‹ØŒ {pharmacy?.name}</h3>
+        <p className="text-sm text-slate-500 mt-1">Ø¥Ù„ÙŠÙƒ Ù…Ù„Ø®Øµ Ù†Ø´Ø§Ø· ØµÙŠØ¯Ù„ÙŠØªÙƒ</p>
       </div>
 
       {subStatus && !subStatus.isSubscribed && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-amber-800">لا يوجد اشتراك نشط</p>
-            <p className="text-xs text-amber-600 mt-0.5">فعّل اشتراكك للاستفادة من جميع الميزات</p>
+            <p className="text-sm font-semibold text-amber-800">Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ø§Ø´ØªØ±Ø§Ùƒ Ù†Ø´Ø·</p>
+            <p className="text-xs text-amber-600 mt-0.5">ÙØ¹Ù‘Ù„ Ø§Ø´ØªØ±Ø§ÙƒÙƒ Ù„Ù„Ø§Ø³ØªÙØ§Ø¯Ø© Ù…Ù† Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù…ÙŠØ²Ø§Øª</p>
           </div>
           <Link
             href="/subscriptions"
             className="text-xs font-medium bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
           >
-            عرض الخطط
+            Ø¹Ø±Ø¶ Ø§Ù„Ø®Ø·Ø·
           </Link>
         </div>
       )}
@@ -104,11 +104,11 @@ export default function DashboardPage() {
         <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-emerald-800">
-              اشتراك {subStatus.plan === "monthly" ? "الشهري" : subStatus.plan === "yearly" ? "السنوي" : "المجاني"} نشط
+              Ø§Ø´ØªØ±Ø§Ùƒ {subStatus.plan === "monthly" ? "Ø§Ù„Ø´Ù‡Ø±ÙŠ" : subStatus.plan === "yearly" ? "Ø§Ù„Ø³Ù†ÙˆÙŠ" : "Ø§Ù„Ù…Ø¬Ø§Ù†ÙŠ"} Ù†Ø´Ø·
             </p>
-            <p className="text-xs text-emerald-600 mt-0.5">{subStatus.daysRemaining} يوم متبقي</p>
+            <p className="text-xs text-emerald-600 mt-0.5">{subStatus.daysRemaining} ÙŠÙˆÙ… Ù…ØªØ¨Ù‚ÙŠ</p>
           </div>
-          <span className="text-xs font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-lg">نشط</span>
+          <span className="text-xs font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Ù†Ø´Ø·</span>
         </div>
       )}
 
@@ -129,9 +129,9 @@ export default function DashboardPage() {
       {pendingReceived.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-slate-800">طلبات تحتاج ردًا</h4>
+            <h4 className="font-semibold text-slate-800">Ø·Ù„Ø¨Ø§Øª ØªØ­ØªØ§Ø¬ Ø±Ø¯Ù‹Ø§</h4>
             <Link href="/requests" className="text-xs text-emerald-600 hover:underline">
-              عرض الكل
+              Ø¹Ø±Ø¶ Ø§Ù„ÙƒÙ„
             </Link>
           </div>
           <div className="space-y-3">
@@ -143,11 +143,11 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-800">{req.medicineName}</p>
                   <p className="text-xs text-slate-500">
-                    من: {req.requesterName} — الكمية: {req.requestedQuantity}
+                    Ù…Ù†: {req.requesterName} â€” Ø§Ù„ÙƒÙ…ÙŠØ©: {req.requestedQuantity}
                   </p>
                 </div>
                 <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
-                  معلق
+                  Ù…Ø¹Ù„Ù‚
                 </span>
               </div>
             ))}
@@ -157,9 +157,9 @@ export default function DashboardPage() {
 
       <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { href: "/my-medicines", label: "إضافة دواء جديد" },
-          { href: "/browse", label: "تصفح الأدوية المتاحة" },
-          { href: "/ai", label: "الذكاء الاصطناعي" },
+          { href: "/my-medicines", label: "Ø¥Ø¶Ø§ÙØ© Ø¯ÙˆØ§Ø¡ Ø¬Ø¯ÙŠØ¯" },
+          { href: "/browse", label: "ØªØµÙØ­ Ø§Ù„Ø£Ø¯ÙˆÙŠØ© Ø§Ù„Ù…ØªØ§Ø­Ø©" },
+          { href: "/analytics" },
         ].map((a) => (
           <Link
             key={a.href}
