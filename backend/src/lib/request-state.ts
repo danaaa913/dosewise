@@ -1,5 +1,7 @@
 import type { RequestStatus } from "../db/schema/requests.js";
 
+export type { RequestStatus };
+
 const ALLOWED_TRANSITIONS: Record<RequestStatus, readonly RequestStatus[]> = {
   pending: ["accepted", "rejected", "cancelled", "expired"],
   accepted: ["completed", "cancelled"],

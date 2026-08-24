@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, real, boolean, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, boolean, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { pharmaciesTable } from "./pharmacies.js";
@@ -8,7 +8,7 @@ export const medicinesTable = pgTable("medicines", {
   pharmacyId: integer("pharmacy_id").notNull().references(() => pharmaciesTable.id),
   name: text("name").notNull(),
   quantity: integer("quantity").notNull(),
-  price: real("price").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   expiryDate: date("expiry_date").notNull(),
   description: text("description"),
   isAvailable: boolean("is_available").notNull().default(true),

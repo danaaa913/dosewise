@@ -17,7 +17,7 @@ router.post("/medicines/add", requirePharmacy, async (req, res): Promise<void> =
   const { name, quantity, price, expiryDate, description, isAvailable } = parsed.data;
   const [medicine] = await db.insert(medicinesTable).values({
     pharmacyId: req.session.pharmacyId!,
-    name, quantity, price, expiryDate,
+    name, quantity, price: price.toFixed(2), expiryDate,
     description: description ?? null,
     isAvailable: isAvailable ?? true,
   }).returning();
@@ -78,7 +78,7 @@ router.put("/medicines/:medicineId/update", requirePharmacy, async (req, res): P
   const updateData: Partial<typeof medicinesTable.$inferInsert> = {};
   if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
   if (parsed.data.quantity !== undefined) updateData.quantity = parsed.data.quantity;
-  if (parsed.data.price !== undefined) updateData.price = parsed.data.price;
+  if (parsed.data.price !== undefined) updateData.price = parsed.data.price.toFixed(2);
   if (parsed.data.expiryDate !== undefined) updateData.expiryDate = parsed.data.expiryDate;
   if (parsed.data.description !== undefined) updateData.description = parsed.data.description;
   if (parsed.data.isAvailable !== undefined) updateData.isAvailable = parsed.data.isAvailable;

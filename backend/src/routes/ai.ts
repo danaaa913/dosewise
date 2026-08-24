@@ -114,25 +114,26 @@ router.get("/ai/price-optimization", requirePharmacy, async (req, res): Promise<
 
   for (const med of target) {
     const [agg] = await db
-      .select({ avg: sql<number>`AVG(${medicinesTable.price})::real`, n: sql<number>`COUNT(*)::int` })
+      .select({ avg: sql<number>`AVG(${medicinesTable.price})::float8`, n: sql<number>`COUNT(*)::int` })
       .from(medicinesTable).where(and(eq(medicinesTable.name, med.name), ne(medicinesTable.pharmacyId, pharmacyId)));
 
-    if (!agg || agg.n === 0) { optimizations.push({ medicine: med.name, currentPrice: med.price, suggestedPrice: med.price, reason: "لا توجد أسعار مقارنة لهذا الدواء حالياً على المنصة" }); continue; }
+    const currentPrice = Number(med.price);
+    if (!agg || agg.n === 0) { optimizations.push({ medicine: med.name, currentPrice, suggestedPrice: currentPrice, reason: "لا توجد أسعار مقارنة لهذا الدواء حالياً على المنصة" }); continue; }
 
-    const avg = agg.avg;
-    if (!Number.isFinite(avg) || avg <= 0) { optimizations.push({ medicine: med.name, currentPrice: med.price, suggestedPrice: med.price, reason: "بيانات الأسعار المقارنة غير كافية لإصدار توصية موثوقة" }); continue; }
+    const avg = Number(agg.avg);
+    if (!Number.isFinite(avg) || avg <= 0) { optimizations.push({ medicine: med.name, currentPrice, suggestedPrice: currentPrice, reason: "بيانات الأسعار المقارنة غير كافية لإصدار توصية موثوقة" }); continue; }
 
-    const diffPct = ((med.price - avg) / avg) * 100;
-    let suggestedPrice = med.price, reason = "";
+    const diffPct = ((currentPrice - avg) / avg) * 100;
+    let suggestedPrice = Math.round(currentPrice * 100) / 100, reason = "";
     if (diffPct > 10) { suggestedPrice = Math.round(avg * 1.05 * 100) / 100; reason = `سعرك أعلى من متوسط السوق (${avg.toFixed(2)} JOD) بنسبة ${diffPct.toFixed(0)}% — يُقترح تخفيضه قليلاً لزيادة المبيعات`; }
     else if (diffPct < -10) { suggestedPrice = Math.round(avg * 0.95 * 100) / 100; reason = `سعرك أقل من متوسط السوق (${avg.toFixed(2)} JOD) بنسبة ${Math.abs(diffPct).toFixed(0)}% — يمكنك رفعه قليلاً لتحسين الهامش`; }
     else { reason = `سعرك متوافق مع متوسط السوق (${avg.toFixed(2)} JOD) — استمر`; }
-    optimizations.push({ medicine: med.name, currentPrice: med.price, suggestedPrice, reason });
+    optimizations.push({ medicine: med.name, currentPrice, suggestedPrice, reason });
   }
 
   if (optimizations.length === 0 && focusMedicine) {
-    const [agg] = await db.select({ avg: sql<number>`AVG(${medicinesTable.price})::real`, n: sql<number>`COUNT(*)::int` }).from(medicinesTable).where(eq(medicinesTable.name, focusMedicine));
-    if (agg && agg.n > 0) optimizations.push({ medicine: focusMedicine, currentPrice: agg.avg, suggestedPrice: agg.avg, reason: `لا تمتلك هذا الدواء — متوسط السعر على المنصة هو ${agg.avg.toFixed(2)} JOD لدى ${agg.n} صيدلية` });
+    const [agg] = await db.select({ avg: sql<number>`AVG(${medicinesTable.price})::float8`, n: sql<number>`COUNT(*)::int` }).from(medicinesTable).where(eq(medicinesTable.name, focusMedicine));
+    if (agg && agg.n > 0) { const marketAvg = Number(agg.avg); optimizations.push({ medicine: focusMedicine, currentPrice: marketAvg, suggestedPrice: marketAvg, reason: `لا تمتلك هذا الدواء — متوسط السعر على المنصة هو ${marketAvg.toFixed(2)} JOD لدى ${agg.n} صيدلية` }); }
   }
   res.json({ optimizations });
 });

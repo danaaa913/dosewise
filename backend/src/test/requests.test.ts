@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+﻿import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../app.js";
@@ -45,6 +45,14 @@ async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: 
   return res.body as { id: number };
 }
 
+let keyCounter = 0;
+async function sendRequest(agent: request.Agent, medicineId: number, requestedQuantity: number) {
+  keyCounter += 1;
+  return agent.post("/api/requests/send")
+    .set("Idempotency-Key", `${stamp}-key-${keyCounter}`)
+    .send({ medicineId, requestedQuantity });
+}
+
 afterAll(async () => {
   if (createdRequestIds.length > 0) {
     await db.delete(requestsTable).where(inArray(requestsTable.id, createdRequestIds));
@@ -67,8 +75,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent);
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 0 });
+    const res = await sendRequest(requester.agent, medicine.id, 0);
 
     expect(res.status).toBe(400);
   });
@@ -78,8 +85,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent);
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: -3 });
+    const res = await sendRequest(requester.agent, medicine.id, -3);
 
     expect(res.status).toBe(400);
   });
@@ -89,8 +95,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent);
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 1.5 });
+    const res = await sendRequest(requester.agent, medicine.id, 1.5);
 
     expect(res.status).toBe(400);
   });
@@ -100,8 +105,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 6 });
+    const res = await sendRequest(requester.agent, medicine.id, 6);
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("exceeds");
@@ -112,8 +116,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { expiryDate: "2020-01-01" });
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    const res = await sendRequest(requester.agent, medicine.id, 1);
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("expired");
@@ -124,8 +127,7 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const res = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 3 });
+    const res = await sendRequest(requester.agent, medicine.id, 3);
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("pending");
@@ -139,8 +141,7 @@ describe("EXC-006/EXC-007: atomic acceptance with stock deduction", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const send = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
     createdRequestIds.push(send.body.id);
 
     const accept = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
@@ -156,28 +157,24 @@ describe("EXC-006/EXC-007: atomic acceptance with stock deduction", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 2 });
 
-    const send = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
     createdRequestIds.push(send.body.id);
 
     await provider.agent.post(`/api/requests/${send.body.id}/accept`);
     expect((await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id)))[0].quantity).toBe(0);
 
-    const lateSend = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 5 });
+    const lateSend = await sendRequest(requester.agent, medicine.id, 5);
     expect(lateSend.status).toBe(400);
   });
 
-  it("EXC-007: concurrent accepts on the last unit — exactly one succeeds", async () => {
+  it("EXC-007: concurrent accepts on the last unit â€” exactly one succeeds", async () => {
     const provider = await registerPharmacy();
     const requesterA = await registerPharmacy();
     const requesterB = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 1 });
 
-    const sendA = await requesterA.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 1 });
-    const sendB = await requesterB.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    const sendA = await sendRequest(requesterA.agent, medicine.id, 1);
+    const sendB = await sendRequest(requesterB.agent, medicine.id, 1);
     createdRequestIds.push(sendA.body.id, sendB.body.id);
 
     const results = await Promise.all([
@@ -203,8 +200,7 @@ describe("EXC-004: status transitions follow the state machine", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const send = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
     const requestId = send.body.id as number;
     createdRequestIds.push(requestId);
 
@@ -225,8 +221,7 @@ describe("EXC-004: status transitions follow the state machine", () => {
     const bystander = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const send = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
     const requestId = send.body.id as number;
     createdRequestIds.push(requestId);
 
@@ -239,8 +234,7 @@ describe("EXC-004: status transitions follow the state machine", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const send = await requester.agent.post("/api/requests/send")
-      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
     const requestId = send.body.id as number;
     createdRequestIds.push(requestId);
 
@@ -253,5 +247,64 @@ describe("EXC-004: status transitions follow the state machine", () => {
       violated = true;
     }
     expect(violated).toBe(true);
+  });
+});
+
+describe("EXC-003: request snapshots price and name at creation", () => {
+  it("snapshot survives later edits to the medicine listing", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    expect(send.status).toBe(201);
+    expect(send.body.unitPrice).toBe("1.25");
+    createdRequestIds.push(send.body.id);
+
+    await db.update(medicinesTable)
+      .set({ name: "Renamed Medicine", price: "9.99" })
+      .where(eq(medicinesTable.id, medicine.id));
+
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(row.unitPrice).toBe("1.25");
+    expect(row.medicineName).toBe("Paracetamol 500mg (EXC test)");
+  });
+});
+
+describe("EXC-010: idempotency prevents duplicate requests", () => {
+  it("same key returns the original request and creates no duplicate", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-idem-${keyCounter}`;
+    const first = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    expect(first.status).toBe(201);
+
+    const second = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    expect(second.status).toBe(200);
+    expect(second.body.duplicate).toBe(true);
+    expect(second.body.id).toBe(first.body.id);
+
+    const rows = await db.select().from(requestsTable).where(eq(requestsTable.idempotencyKey, sharedKey));
+    expect(rows).toHaveLength(1);
+    createdRequestIds.push(first.body.id);
+  });
+
+  it("missing idempotency key is rejected", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Idempotency");
   });
 });

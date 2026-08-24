@@ -16,6 +16,28 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { medicineId, requestedQuantity } = parsed.data;
+  const idempotencyKey = typeof req.header("idempotency-key") === "string" ? req.header("idempotency-key")!.trim() : "";
+  if (!idempotencyKey || idempotencyKey.length > 255) {
+    res.status(400).json({ error: "Idempotency-Key header is required (max 255 chars)" }); return;
+  }
+
+  const [existing] = await db.select().from(requestsTable).where(and(
+    eq(requestsTable.requesterPharmacyId, req.session.pharmacyId!),
+    eq(requestsTable.idempotencyKey, idempotencyKey),
+  ));
+  if (existing) {
+    res.status(200).json({
+      id: existing.id, requesterPharmacyId: existing.requesterPharmacyId,
+      providerPharmacyId: existing.providerPharmacyId, medicineId: existing.medicineId,
+      requestedQuantity: existing.requestedQuantity, unitPrice: existing.unitPrice,
+      medicineName: existing.medicineName, status: existing.status,
+      requestDate: existing.requestDate.toISOString(),
+      responseDate: existing.responseDate ? existing.responseDate.toISOString() : null,
+      duplicate: true,
+    });
+    return;
+  }
+
   const [medicine] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicineId));
   if (!medicine) { res.status(404).json({ error: "Medicine not found" }); return; }
   if (!medicine.isAvailable) { res.status(400).json({ error: "Medicine is not available" }); return; }
@@ -29,6 +51,9 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
     requesterPharmacyId: req.session.pharmacyId!,
     providerPharmacyId: medicine.pharmacyId,
     medicineId, requestedQuantity,
+    unitPrice: medicine.price,
+    medicineName: medicine.name,
+    idempotencyKey,
   }).returning();
 
   const [requester] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
@@ -40,7 +65,8 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
   res.status(201).json({
     id: request.id, requesterPharmacyId: request.requesterPharmacyId,
     providerPharmacyId: request.providerPharmacyId, medicineId: request.medicineId,
-    requestedQuantity: request.requestedQuantity, status: request.status,
+    requestedQuantity: request.requestedQuantity, unitPrice: request.unitPrice,
+    medicineName: request.medicineName, status: request.status,
     requestDate: request.requestDate.toISOString(),
     responseDate: request.responseDate ? request.responseDate.toISOString() : null,
   });
