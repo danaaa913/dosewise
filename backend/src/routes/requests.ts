@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { SendRequestBody, AcceptRequestParams, RejectRequestParams } from "../zod/schemas.js";
+import { canTransition, type RequestStatus } from "../lib/request-state.js";
 
 const router: IRouter = Router();
 
@@ -19,6 +20,10 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
   if (!medicine) { res.status(404).json({ error: "Medicine not found" }); return; }
   if (!medicine.isAvailable) { res.status(400).json({ error: "Medicine is not available" }); return; }
   if (medicine.pharmacyId === req.session.pharmacyId) { res.status(400).json({ error: "Cannot request your own medicine" }); return; }
+  if (new Date(medicine.expiryDate) < new Date()) { res.status(400).json({ error: "Medicine is expired" }); return; }
+  if (requestedQuantity > medicine.quantity) {
+    res.status(400).json({ error: `Requested quantity exceeds available stock (${medicine.quantity})` }); return;
+  }
 
   const [request] = await db.insert(requestsTable).values({
     requesterPharmacyId: req.session.pharmacyId!,
@@ -29,7 +34,7 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
   const [requester] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
     pharmacyId: medicine.pharmacyId,
-    message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${medicine.name} (الكمية: ${requestedQuantity})`,
+    message: `Ø·Ù„Ø¨ Ø¬Ø¯ÙŠØ¯ Ù…Ù† ${requester?.name ?? "ØµÙŠØ¯Ù„ÙŠØ©"} Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine.name} (Ø§Ù„ÙƒÙ…ÙŠØ©: ${requestedQuantity})`,
   });
 
   res.status(201).json({
@@ -98,7 +103,7 @@ router.post("/requests/:requestId/accept", requirePharmacy, async (req, res): Pr
   const [request] = await db.select().from(requestsTable).where(eq(requestsTable.id, params.data.requestId));
   if (!request) { res.status(404).json({ error: "Request not found" }); return; }
   if (request.providerPharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (request.status !== "pending") { res.status(400).json({ error: "Request is not pending" }); return; }
+  if (!canTransition(request.status as RequestStatus, "accepted")) { res.status(400).json({ error: `Cannot move request from ${request.status} to accepted` }); return; }
 
   await db.update(requestsTable).set({ status: "accepted", responseDate: new Date() })
     .where(eq(requestsTable.id, params.data.requestId));
@@ -107,7 +112,7 @@ router.post("/requests/:requestId/accept", requirePharmacy, async (req, res): Pr
   const [provider] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
     pharmacyId: request.requesterPharmacyId,
-    message: `تم قبول طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
+    message: `ØªÙ… Ù‚Ø¨ÙˆÙ„ Ø·Ù„Ø¨Ùƒ Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine?.name ?? ""} Ù…Ù† ØµÙŠØ¯Ù„ÙŠØ© ${provider?.name ?? ""}`,
   });
   res.json({ message: "Request accepted" });
 });
@@ -119,7 +124,7 @@ router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Pr
   const [request] = await db.select().from(requestsTable).where(eq(requestsTable.id, params.data.requestId));
   if (!request) { res.status(404).json({ error: "Request not found" }); return; }
   if (request.providerPharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (request.status !== "pending") { res.status(400).json({ error: "Request is not pending" }); return; }
+  if (!canTransition(request.status as RequestStatus, "rejected")) { res.status(400).json({ error: `Cannot move request from ${request.status} to rejected` }); return; }
 
   await db.update(requestsTable).set({ status: "rejected", responseDate: new Date() })
     .where(eq(requestsTable.id, params.data.requestId));
@@ -128,7 +133,7 @@ router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Pr
   const [provider] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
     pharmacyId: request.requesterPharmacyId,
-    message: `تم رفض طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
+    message: `ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨Ùƒ Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine?.name ?? ""} Ù…Ù† ØµÙŠØ¯Ù„ÙŠØ© ${provider?.name ?? ""}`,
   });
   res.json({ message: "Request rejected" });
 });

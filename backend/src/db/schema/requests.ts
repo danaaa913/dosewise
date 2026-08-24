@@ -1,8 +1,21 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { pharmaciesTable } from "./pharmacies.js";
 import { medicinesTable } from "./medicines.js";
+
+export const REQUEST_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+  "completed",
+  "expired",
+] as const;
+
+export type RequestStatus = (typeof REQUEST_STATUSES)[number];
+
+export const requestStatusEnum = pgEnum("request_status", REQUEST_STATUSES);
 
 export const requestsTable = pgTable("requests", {
   id: serial("id").primaryKey(),
@@ -10,7 +23,7 @@ export const requestsTable = pgTable("requests", {
   providerPharmacyId: integer("provider_pharmacy_id").notNull().references(() => pharmaciesTable.id),
   medicineId: integer("medicine_id").notNull().references(() => medicinesTable.id),
   requestedQuantity: integer("requested_quantity").notNull(),
-  status: text("status").notNull().default("pending"),
+  status: requestStatusEnum("status").notNull().default("pending"),
   requestDate: timestamp("request_date", { withTimezone: true }).notNull().defaultNow(),
   responseDate: timestamp("response_date", { withTimezone: true }),
 });

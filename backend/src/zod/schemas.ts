@@ -49,8 +49,8 @@ export const DeleteMedicineParams = zod.object({
 });
 
 export const SendRequestBody = zod.object({
-  medicineId: zod.number(),
-  requestedQuantity: zod.number(),
+  medicineId: zod.number().int().positive(),
+  requestedQuantity: zod.number().int().min(1),
 });
 
 export const AcceptRequestParams = zod.object({

@@ -1,0 +1,193 @@
+import { describe, it, expect, afterAll } from "vitest";
+import request from "supertest";
+import { eq, inArray, sql } from "drizzle-orm";
+import app from "../app.js";
+import { db, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
+
+const stamp = Date.now();
+let counter = 0;
+
+const createdPharmacyEmails: string[] = [];
+const createdMedicineIds: number[] = [];
+const createdRequestIds: number[] = [];
+
+async function registerPharmacy(): Promise<{ email: string; agent: request.Agent }> {
+  counter += 1;
+  const email = `exc-${stamp}-${counter}@example.com`;
+  createdPharmacyEmails.push(email);
+  const res = await request(app).post("/api/auth/register").send({
+    name: `EXC Test Pharmacy ${counter}`,
+    managerName: "Tester",
+    email,
+    phone: "0790000000",
+    city: "Irbid",
+    address: "Test St.",
+    password: "password123456",
+  });
+  expect(res.status).toBe(201);
+
+  const agent = request.agent(app);
+  const login = await agent.post("/api/auth/login").send({ email, password: "password123456" });
+  expect(login.status).toBe(200);
+  return { email, agent };
+}
+
+async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: number; expiryDate: string }> = {}) {
+  const res = await agent.post("/api/medicines/add").send({
+    name: "Paracetamol 500mg (EXC test)",
+    quantity: 5,
+    price: 1.25,
+    expiryDate: "2099-01-01",
+    ...overrides,
+  });
+  expect(res.status).toBe(201);
+  createdMedicineIds.push(res.body.id);
+  return res.body as { id: number };
+}
+
+afterAll(async () => {
+  if (createdRequestIds.length > 0) {
+    await db.delete(requestsTable).where(inArray(requestsTable.id, createdRequestIds));
+  }
+  if (createdMedicineIds.length > 0) {
+    await db.delete(medicinesTable).where(inArray(medicinesTable.id, createdMedicineIds));
+  }
+  for (const email of createdPharmacyEmails) {
+    const [pharmacy] = await db.select({ id: pharmaciesTable.id }).from(pharmaciesTable).where(eq(pharmaciesTable.email, email));
+    if (pharmacy) {
+      await db.delete(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacy.id));
+      await db.delete(pharmaciesTable).where(eq(pharmaciesTable.id, pharmacy.id));
+    }
+  }
+});
+
+describe("EXC-001: requested quantity must be >=1 and within stock", () => {
+  it("rejects zero", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent);
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 0 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects negative values", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent);
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: -3 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects non-integer values", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent);
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 1.5 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects quantities exceeding available stock", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 6 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("exceeds");
+  });
+
+  it("rejects requests for expired medicines", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { expiryDate: "2020-01-01" });
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("expired");
+  });
+
+  it("accepts a valid request and stores it as pending", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const res = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 3 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe("pending");
+    createdRequestIds.push(res.body.id);
+  });
+});
+
+describe("EXC-004: status transitions follow the state machine", () => {
+  it("provider accepts a pending request exactly once", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const requestId = send.body.id as number;
+    createdRequestIds.push(requestId);
+
+    const accept = await provider.agent.post(`/api/requests/${requestId}/accept`);
+    expect(accept.status).toBe(200);
+
+    const again = await provider.agent.post(`/api/requests/${requestId}/accept`);
+    expect(again.status).toBe(400);
+    expect(again.body.error).toContain("accepted");
+
+    const rejectAfterAccept = await provider.agent.post(`/api/requests/${requestId}/reject`);
+    expect(rejectAfterAccept.status).toBe(400);
+  });
+
+  it("only the provider may accept", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const bystander = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const requestId = send.body.id as number;
+    createdRequestIds.push(requestId);
+
+    const forbidden = await bystander.agent.post(`/api/requests/${requestId}/accept`);
+    expect(forbidden.status).toBe(403);
+  });
+
+  it("database rejects status values outside the enum", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    const requestId = send.body.id as number;
+    createdRequestIds.push(requestId);
+
+    let violated = false;
+    try {
+      await db.execute(
+        sql`UPDATE requests SET status = 'banana' WHERE id = ${requestId}`,
+      );
+    } catch {
+      violated = true;
+    }
+    expect(violated).toBe(true);
+  });
+});
