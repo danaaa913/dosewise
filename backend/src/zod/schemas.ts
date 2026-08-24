@@ -61,6 +61,10 @@ export const RejectRequestParams = zod.object({
   requestId: zod.coerce.number(),
 });
 
+export const RequestIdParams = zod.object({
+  requestId: zod.coerce.number(),
+});
+
 export const ProcessPaymentBody = zod.object({
   planId: zod.string(),
   cardNumber: zod.string().optional(),

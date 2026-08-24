@@ -4,7 +4,7 @@ export type { RequestStatus };
 
 const ALLOWED_TRANSITIONS: Record<RequestStatus, readonly RequestStatus[]> = {
   pending: ["accepted", "rejected", "cancelled", "expired"],
-  accepted: ["completed", "cancelled"],
+  accepted: ["completed"],
   rejected: [],
   cancelled: [],
   completed: [],

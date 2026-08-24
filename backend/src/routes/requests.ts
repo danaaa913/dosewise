@@ -1,7 +1,7 @@
 ﻿import { Router, type IRouter } from "express";
 import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable } from "../db/index.js";
 import { eq, and, gte, sql } from "drizzle-orm";
-import { SendRequestBody, AcceptRequestParams, RejectRequestParams } from "../zod/schemas.js";
+import { SendRequestBody, AcceptRequestParams, RejectRequestParams, RequestIdParams } from "../zod/schemas.js";
 import { canTransition, type RequestStatus } from "../lib/request-state.js";
 
 const router: IRouter = Router();
@@ -189,9 +189,67 @@ router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Pr
   const [provider] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
     pharmacyId: request.requesterPharmacyId,
-    message: `ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨Ùƒ Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine?.name ?? ""} Ù…Ù† ØµÙŠØ¯Ù„ÙŠØ© ${provider?.name ?? ""}`,
+    message: `تم رفض طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
   });
   res.json({ message: "Request rejected" });
+});
+
+router.post("/requests/:requestId/cancel", requirePharmacy, async (req, res): Promise<void> => {
+  const params = RequestIdParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [request] = await db.select().from(requestsTable).where(eq(requestsTable.id, params.data.requestId));
+  if (!request) { res.status(404).json({ error: "Request not found" }); return; }
+  if (request.requesterPharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Only the requester may cancel" }); return; }
+  if (!canTransition(request.status as RequestStatus, "cancelled")) { res.status(400).json({ error: `Cannot cancel a ${request.status} request` }); return; }
+
+  let status = 200;
+  let body: object;
+
+  await db.transaction(async (tx) => {
+    const updated = await tx.update(requestsTable)
+      .set({ status: "cancelled", responseDate: new Date() })
+      .where(and(eq(requestsTable.id, request.id), eq(requestsTable.status, "pending")))
+      .returning({ id: requestsTable.id });
+
+    if (updated.length === 0) {
+      status = 409;
+      body = { error: "Request is no longer pending" };
+      return;
+    }
+
+    const [medicine] = await tx.select({ name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, request.medicineId));
+    const [provider] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, request.providerPharmacyId));
+    const [requester] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
+    await tx.insert(notificationsTable).values({
+      pharmacyId: request.providerPharmacyId,
+      message: `ألغى ${requester?.name ?? "الطالب"} طلبه للدواء: ${medicine?.name ?? ""}`,
+    });
+
+    body = { message: "Request cancelled" };
+  });
+
+  res.status(status!).json(body!);
+});
+
+router.post("/requests/:requestId/complete", requirePharmacy, async (req, res): Promise<void> => {
+  const params = RequestIdParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [request] = await db.select().from(requestsTable).where(eq(requestsTable.id, params.data.requestId));
+  if (!request) { res.status(404).json({ error: "Request not found" }); return; }
+  if (request.requesterPharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Only the requester may confirm receipt" }); return; }
+  if (!canTransition(request.status as RequestStatus, "completed")) { res.status(400).json({ error: `Cannot complete a ${request.status} request` }); return; }
+
+  await db.update(requestsTable).set({ status: "completed", responseDate: new Date() })
+    .where(eq(requestsTable.id, params.data.requestId));
+
+  const [medicine] = await db.select({ name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, request.medicineId));
+  await db.insert(notificationsTable).values({
+    pharmacyId: request.providerPharmacyId,
+    message: `أكدت الصيدلية الطالبة استلام الدواء: ${medicine?.name ?? ""} — اكتمل الطلب`,
+  });
+  res.json({ message: "Request completed" });
 });
 
 export default router;
