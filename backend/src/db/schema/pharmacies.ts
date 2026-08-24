@@ -17,6 +17,11 @@ export const pharmaciesTable = pgTable("pharmacies", {
   subscriptionStartDate: timestamp("subscription_start_date", { withTimezone: true }),
   subscriptionEndDate: timestamp("subscription_end_date", { withTimezone: true }),
   lastPaymentDate: timestamp("last_payment_date", { withTimezone: true }),
+  licenseNumber: text("license_number"),
+  licenseDocName: text("license_doc_name"),
+  licenseDocMime: text("license_doc_mime"),
+  licenseDocData: text("license_doc_data"),
+  licenseDocUpdatedAt: timestamp("license_doc_updated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

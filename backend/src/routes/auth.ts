@@ -31,7 +31,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const parsed = RegisterPharmacyBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { name, managerName, email, phone, city, address, password } = parsed.data;
+  const { name, managerName, email, phone, city, address, password, licenseNumber, licenseDoc } = parsed.data;
 
   const existing = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.email, email));
   if (existing.length > 0) { res.status(400).json({ error: "Email already registered" }); return; }
@@ -39,6 +39,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const passwordHash = await bcrypt.hash(password, 10);
   const [pharmacy] = await db.insert(pharmaciesTable).values({
     name, managerName, email, phone, city, address, passwordHash,
+    licenseNumber: licenseNumber ?? null,
+    licenseDocName: licenseDoc?.name ?? null,
+    licenseDocMime: licenseDoc?.mime ?? null,
+    licenseDocData: licenseDoc?.data ?? null,
+    licenseDocUpdatedAt: licenseDoc ? new Date() : null,
   }).returning();
 
   startPharmacySession(req, res, pharmacy.id, 201, {

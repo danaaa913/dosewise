@@ -19,6 +19,30 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [licenseFile, setLicenseFile] = useState<{ name: string; mime: string; data: string } | null>(null);
+
+  const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+  const handleLicenseFile = (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setError("حجم ملف السجل التجاري يتجاوز 4MB");
+      return;
+    }
+    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setError("صيغة الملف غير مدعومة — المسموح: PDF أو صورة");
+      return;
+    }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result).split(",")[1] ?? "";
+      setLicenseFile({ name: file.name, mime: file.type, data });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +54,11 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const { confirmPassword, ...data } = form;
-      await api.auth.register(data);
+      await api.auth.register({
+        ...data,
+        ...(licenseNumber.trim() ? { licenseNumber: licenseNumber.trim() } : {}),
+        ...(licenseFile ? { licenseDoc: licenseFile } : {}),
+      });
       await refresh();
       navigate("/dashboard");
     } catch (err: any) {
@@ -111,6 +139,37 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-4">
               {field("password", "كلمة المرور", "password", "••••••••")}
               {field("confirmPassword", "تأكيد كلمة المرور", "password", "••••••••")}
+            </div>
+
+            <div className="border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">السجل التجاري <span className="text-slate-400 font-normal text-xs">(اختياري)</span></h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم السجل التجاري</label>
+                  <input
+                    type="text"
+                    value={licenseNumber}
+                    onChange={(e) => setLicenseNumber(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="مثال: 2025678"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">صورة/ملف السجل <span className="text-slate-400 text-xs">(PDF أو صورة، حتى 4MB)</span></label>
+                  <input
+                    type="file"
+                    accept=".pdf,image/jpeg,image/png,image/webp"
+                    onChange={(e) => handleLicenseFile(e.target.files?.[0])}
+                    className="w-full text-sm text-slate-600 file:me-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-[#eef5f5] file:text-[#1b3a5f] file:text-sm file:font-medium file:cursor-pointer hover:file:bg-[#d6ebec]"
+                  />
+                  {licenseFile && (
+                    <p className="text-xs text-emerald-700 mt-1.5">
+                      ✓ مرفق: {licenseFile.name}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
             <button

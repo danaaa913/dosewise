@@ -7,6 +7,7 @@ import requestsRouter from "./requests.js";
 import subscriptionsRouter from "./subscriptions.js";
 import notificationsRouter from "./notifications.js";
 import aiRouter from "./ai.js";
+import licenseRouter from "./license.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(requestsRouter);
 router.use(subscriptionsRouter);
 router.use(notificationsRouter);
 router.use(aiRouter);
+router.use(licenseRouter);
 
 export default router;

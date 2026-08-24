@@ -30,6 +30,8 @@ export const api = {
       city: string;
       address: string;
       password: string;
+      licenseNumber?: string;
+      licenseDoc?: { name: string; mime: string; data: string };
     }) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
     login: (data: { email: string; password: string }) =>
       request("/auth/login", { method: "POST", body: JSON.stringify(data) }),

@@ -6,6 +6,16 @@ export const jordanPhone = zod
   .string()
   .regex(/^(\+962|00962|0)?7[789]\d{7}$/, "Invalid Jordanian phone number");
 
+const MAX_LICENSE_DOC_BASE64 = 6_000_000;
+
+export const LicenseDocumentInput = zod.object({
+  name: zod.string().min(1).max(200),
+  mime: zod.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
+  data: zod.string().max(MAX_LICENSE_DOC_BASE64),
+});
+
+export type LicenseDocument = zod.infer<typeof LicenseDocumentInput>;
+
 export const RegisterPharmacyBody = zod.object({
   name: zod.string().min(2).max(120),
   managerName: zod.string().min(2).max(120),
@@ -14,6 +24,13 @@ export const RegisterPharmacyBody = zod.object({
   city: zod.string().min(2).max(80),
   address: zod.string().min(5).max(300),
   password: zod.string().min(12).max(128),
+  licenseNumber: zod.string().max(50).optional(),
+  licenseDoc: LicenseDocumentInput.optional(),
+});
+
+export const UpdateLicenseBody = zod.object({
+  licenseNumber: zod.string().max(50).optional(),
+  licenseDoc: LicenseDocumentInput.optional(),
 });
 
 export const LoginPharmacyBody = zod.object({
