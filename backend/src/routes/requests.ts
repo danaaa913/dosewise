@@ -1,6 +1,6 @@
 ﻿import { Router, type IRouter } from "express";
 import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable } from "../db/index.js";
-import { eq } from "drizzle-orm";
+import { eq, and, gte, sql } from "drizzle-orm";
 import { SendRequestBody, AcceptRequestParams, RejectRequestParams } from "../zod/schemas.js";
 import { canTransition, type RequestStatus } from "../lib/request-state.js";
 
@@ -100,21 +100,51 @@ router.post("/requests/:requestId/accept", requirePharmacy, async (req, res): Pr
   const params = AcceptRequestParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [request] = await db.select().from(requestsTable).where(eq(requestsTable.id, params.data.requestId));
-  if (!request) { res.status(404).json({ error: "Request not found" }); return; }
-  if (request.providerPharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (!canTransition(request.status as RequestStatus, "accepted")) { res.status(400).json({ error: `Cannot move request from ${request.status} to accepted` }); return; }
+  let status = 200;
+  let body: object;
 
-  await db.update(requestsTable).set({ status: "accepted", responseDate: new Date() })
-    .where(eq(requestsTable.id, params.data.requestId));
+  await db.transaction(async (tx) => {
+    const [request] = await tx.select().from(requestsTable)
+      .where(eq(requestsTable.id, params.data.requestId))
+      .for("update");
 
-  const [medicine] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, request.medicineId));
-  const [provider] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
-  await db.insert(notificationsTable).values({
-    pharmacyId: request.requesterPharmacyId,
-    message: `ØªÙ… Ù‚Ø¨ÙˆÙ„ Ø·Ù„Ø¨Ùƒ Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine?.name ?? ""} Ù…Ù† ØµÙŠØ¯Ù„ÙŠØ© ${provider?.name ?? ""}`,
+    if (!request) { status = 404; body = { error: "Request not found" }; return; }
+    if (request.providerPharmacyId !== req.session.pharmacyId) { status = 403; body = { error: "Forbidden" }; return; }
+    if (!canTransition(request.status as RequestStatus, "accepted")) {
+      status = 400;
+      body = { error: `Cannot move request from ${request.status} to accepted` };
+      return;
+    }
+
+    const deducted = await tx.update(medicinesTable)
+      .set({ quantity: sql`${medicinesTable.quantity} - ${request.requestedQuantity}` })
+      .where(and(
+        eq(medicinesTable.id, request.medicineId),
+        gte(medicinesTable.quantity, request.requestedQuantity),
+      ))
+      .returning({ id: medicinesTable.id, remaining: medicinesTable.quantity });
+
+    if (deducted.length === 0) {
+      status = 409;
+      body = { error: "Insufficient stock to accept this request" };
+      return;
+    }
+
+    await tx.update(requestsTable)
+      .set({ status: "accepted", responseDate: new Date() })
+      .where(eq(requestsTable.id, request.id));
+
+    const [medicine] = await tx.select({ name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, request.medicineId));
+    const [provider] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
+    await tx.insert(notificationsTable).values({
+      pharmacyId: request.requesterPharmacyId,
+      message: `تم قبول طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
+    });
+
+    body = { message: "Request accepted", remainingStock: deducted[0].remaining };
   });
-  res.json({ message: "Request accepted" });
+
+  res.status(status!).json(body!);
 });
 
 router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Promise<void> => {

@@ -133,6 +133,70 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
   });
 });
 
+describe("EXC-006/EXC-007: atomic acceptance with stock deduction", () => {
+  it("accepting a request deducts stock atomically", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    createdRequestIds.push(send.body.id);
+
+    const accept = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect(accept.status).toBe(200);
+    expect(accept.body.remainingStock).toBe(3);
+
+    const [after] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(after.quantity).toBe(3);
+  });
+
+  it("failing acceptance leaves no partial changes", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 2 });
+
+    const send = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    createdRequestIds.push(send.body.id);
+
+    await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect((await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id)))[0].quantity).toBe(0);
+
+    const lateSend = await requester.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 5 });
+    expect(lateSend.status).toBe(400);
+  });
+
+  it("EXC-007: concurrent accepts on the last unit — exactly one succeeds", async () => {
+    const provider = await registerPharmacy();
+    const requesterA = await registerPharmacy();
+    const requesterB = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 1 });
+
+    const sendA = await requesterA.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    const sendB = await requesterB.agent.post("/api/requests/send")
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    createdRequestIds.push(sendA.body.id, sendB.body.id);
+
+    const results = await Promise.all([
+      provider.agent.post(`/api/requests/${sendA.body.id}/accept`),
+      provider.agent.post(`/api/requests/${sendB.body.id}/accept`),
+    ]);
+
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+
+    const [after] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(after.quantity).toBe(0);
+
+    const rows = await db.select().from(requestsTable).where(inArray(requestsTable.id, [sendA.body.id, sendB.body.id]));
+    const acceptedCount = rows.filter((r) => r.status === "accepted").length;
+    expect(acceptedCount).toBe(1);
+  });
+});
+
 describe("EXC-004: status transitions follow the state machine", () => {
   it("provider accepts a pending request exactly once", async () => {
     const provider = await registerPharmacy();
