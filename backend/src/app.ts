@@ -6,6 +6,8 @@ import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { noCache } from "./middlewares/no-cache.js";
 
+export const SESSION_COOKIE_NAME = "dosewise.sid";
+
 const app: Express = express();
 
 app.set("trust proxy", 1);
@@ -30,6 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
+    name: SESSION_COOKIE_NAME,
     secret: process.env.SESSION_SECRET || "dosewise-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
