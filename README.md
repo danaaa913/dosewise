@@ -54,12 +54,16 @@ pnpm dev
 
 ## Test Credentials
 
+Pharmacy accounts below are seeded by `pnpm seed` (development data only):
+
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@dosewise.com | admin123 |
+| Admin | set via `ADMIN_EMAIL` in `.env` | set via `ADMIN_PASSWORD` |
 | Pharmacy 1 | user1@test.com | user123 |
 | Pharmacy 2 | user2@test.com | user123 |
 | Pharmacy 3 | user3@test.com | user123 |
+
+The administrator account is **not** hardcoded. It is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` environment variables at startup and its password hash is refreshed by `pnpm seed`. The server refuses to start if required secrets are missing.
 
 Admin login is at: http://localhost:5173/admin
 

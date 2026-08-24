@@ -3,7 +3,13 @@ import bcrypt from "bcryptjs";
 import { db, pool, adminsTable, pharmaciesTable, medicinesTable } from "../db/index.js";
 import { eq } from "drizzle-orm";
 
-const ADMIN = { email: "admin@dosewise.com", password: "admin123" };
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error("ADMIN_EMAIL and ADMIN_PASSWORD are required in .env to seed the administrator.");
+  process.exit(1);
+}
 
 const PHARMACIES = [
   {
@@ -43,14 +49,14 @@ async function main() {
   console.log("Seeding DoseWise databaseâ€¦");
 
   // Admin
-  const [existingAdmin] = await db.select().from(adminsTable).where(eq(adminsTable.email, ADMIN.email));
-  const adminHash = await bcrypt.hash(ADMIN.password, 10);
+  const [existingAdmin] = await db.select().from(adminsTable).where(eq(adminsTable.email, ADMIN_EMAIL));
+  const adminHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   if (!existingAdmin) {
-    await db.insert(adminsTable).values({ email: ADMIN.email, passwordHash: adminHash });
-    console.log(`âœ“ Created admin: ${ADMIN.email}`);
+    await db.insert(adminsTable).values({ email: ADMIN_EMAIL, passwordHash: adminHash });
+    console.log(`âœ“ Created admin: ${ADMIN_EMAIL}`);
   } else {
     await db.update(adminsTable).set({ passwordHash: adminHash }).where(eq(adminsTable.id, existingAdmin.id));
-    console.log(`âœ“ Updated admin: ${ADMIN.email}`);
+    console.log(`âœ“ Updated admin password: ${ADMIN_EMAIL}`);
   }
 
   // Pharmacies

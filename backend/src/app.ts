@@ -8,6 +8,14 @@ import { noCache } from "./middlewares/no-cache.js";
 
 export const SESSION_COOKIE_NAME = "dosewise.sid";
 
+const sessionSecret = process.env.SESSION_SECRET;
+
+if (!sessionSecret) {
+  throw new Error(
+    "SESSION_SECRET is missing. Add it to your .env file — refusing to start with an insecure default.",
+  );
+}
+
 const app: Express = express();
 
 app.set("trust proxy", 1);
@@ -33,7 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
     name: SESSION_COOKIE_NAME,
-    secret: process.env.SESSION_SECRET || "dosewise-secret-key-change-in-production",
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
