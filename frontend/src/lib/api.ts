@@ -1,5 +1,9 @@
 const API_BASE = "/api";
 
+export function formatPrice(value: string | number): string {
+  return Number(value).toFixed(2);
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -73,7 +77,11 @@ export const api = {
   },
   requests: {
     send: (data: { medicineId: number; requestedQuantity: number }) =>
-      request("/requests/send", { method: "POST", body: JSON.stringify(data) }),
+      request("/requests/send", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify(data),
+      }),
     sent: () => request<ExchangeRequest[]>("/requests/sent"),
     received: () => request<ExchangeRequest[]>("/requests/received"),
     accept: (requestId: number) =>
@@ -145,7 +153,7 @@ export interface Medicine {
   pharmacyId: number;
   name: string;
   quantity: number;
-  price: number;
+  price: string;
   expiryDate: string;
   description: string | null;
   isAvailable: boolean;
@@ -162,7 +170,7 @@ export interface ExchangeRequest {
   providerPharmacyId: number;
   medicineId: number;
   requestedQuantity: number;
-  status: "pending" | "accepted" | "rejected";
+  status: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "expired";
   requestDate: string;
   responseDate: string | null;
   medicineName: string;
@@ -218,7 +226,7 @@ export interface AdminMedicine {
   pharmacyId: number;
   name: string;
   quantity: number;
-  price: number;
+  price: string;
   expiryDate: string;
   description: string | null;
   isAvailable: boolean;

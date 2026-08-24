@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, medicinesTable, pharmaciesTable } from "../db/index.js";
-import { eq } from "drizzle-orm";
+import { eq, and, gt, gte } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
 
 const router: IRouter = Router();
@@ -41,6 +41,7 @@ router.get("/medicines/my", requirePharmacy, async (req, res): Promise<void> => 
 
 router.get("/medicines/available", requirePharmacy, async (req, res): Promise<void> => {
   const search = req.query.search as string | undefined;
+  const today = new Date().toISOString().slice(0, 10);
   const medicines = await db
     .select({
       id: medicinesTable.id, pharmacyId: medicinesTable.pharmacyId,
@@ -51,7 +52,11 @@ router.get("/medicines/available", requirePharmacy, async (req, res): Promise<vo
     })
     .from(medicinesTable)
     .leftJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
-    .where(eq(medicinesTable.isAvailable, true));
+    .where(and(
+      eq(medicinesTable.isAvailable, true),
+      gt(medicinesTable.quantity, 0),
+      gte(medicinesTable.expiryDate, today),
+    ));
 
   const filtered = medicines.filter(m => m.pharmacyId !== req.session.pharmacyId);
   const searched = search
