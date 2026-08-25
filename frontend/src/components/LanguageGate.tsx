@@ -11,8 +11,8 @@ export function LanguageGate() {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#1b3a5f] via-[#1e4a52] to-[#3f8b8e] flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-5 sm:p-8 text-center">
+    <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#1b3a5f] via-[#1e4a52] to-[#3f8b8e] flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-5 sm:p-8 text-center overflow-hidden">
         <div className="flex justify-center mb-4">
           <Logo size={64} />
         </div>
