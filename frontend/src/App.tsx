@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { LanguageProvider, useLanguage } from "@/i18n/LanguageContext";
-import { LanguageGate } from "@/components/LanguageGate";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import DashboardPage from "@/pages/dashboard";
@@ -66,7 +66,7 @@ function GuestRoute({ component: Component }: { component: React.ComponentType }
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <GuestRoute component={LoginPage} />} />
+      <Route path="/" component={LandingPage} />
       <Route path="/login" component={() => <GuestRoute component={LoginPage} />} />
       <Route path="/register" component={() => <GuestRoute component={RegisterPage} />} />
       <Route path="/dashboard" component={() => <PharmacyRoute component={DashboardPage} />} />
@@ -93,7 +93,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <LanguageProvider>
-          <LanguageChooser />
           <AuthProvider>
             <WouterRouter>
               <Router />
@@ -104,12 +103,6 @@ function App() {
       </TooltipProvider>
     </QueryClientProvider>
   );
-}
-
-function LanguageChooser() {
-  const { hasChosen } = useLanguage();
-  if (hasChosen) return null;
-  return <LanguageGate />;
 }
 
 export default App;

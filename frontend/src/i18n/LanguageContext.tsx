@@ -5,21 +5,26 @@ const STORAGE_KEY = "dosewise.lang";
 
 interface LanguageContextValue {
   lang: Lang;
-  hasChosen: boolean;
   setLang: (lang: Lang) => void;
   t: Translations;
 }
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-function readStoredLang(): Lang | null {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === "ar" || stored === "en" ? stored : null;
+function detectLang(): Lang {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "ar" || stored === "en") return stored;
+  } catch {
+    /* storage unavailable */
+  }
+  const nav =
+    (typeof navigator !== "undefined" && (navigator.languages?.[0] ?? navigator.language)) || "";
+  return nav.toLowerCase().startsWith("ar") ? "ar" : "en";
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(() => readStoredLang() ?? "ar");
-  const [hasChosen, setHasChosen] = useState<boolean>(() => readStoredLang() !== null);
+  const [lang, setLangState] = useState<Lang>(detectLang);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -27,13 +32,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [lang]);
 
   const setLang = (next: Lang) => {
-    localStorage.setItem(STORAGE_KEY, next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* storage unavailable */
+    }
     setLangState(next);
-    setHasChosen(true);
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, hasChosen, setLang, t: translations[lang] }}>
+    <LanguageContext.Provider value={{ lang, setLang, t: translations[lang] }}>
       {children}
     </LanguageContext.Provider>
   );

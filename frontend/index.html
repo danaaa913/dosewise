@@ -4,7 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1b3a5f" />
-    <title>DoseWise</title>
+    <meta
+      name="description"
+      content="منصة DoseWise تربط الصيدليات الأردنية لتبادل الأدوية المتوفرة وتقليل الهدر — طلبات موثقة، متابعة واضحة لحالات الطلبات، وتحقق من الصيدليات قبل التبادل."
+    />
+    <title>DoseWise | منصة تبادل الأدوية بين الصيدليات</title>
+    <script>
+      (function () {
+        try {
+          var s = localStorage.getItem("dosewise.lang");
+          var l = s === "ar" || s === "en" ? s : ((navigator.languages && navigator.languages[0]) || navigator.language || "").toLowerCase().indexOf("ar") === 0 ? "ar" : "en";
+          var d = document.documentElement;
+          d.lang = l;
+          d.dir = l === "ar" ? "rtl" : "ltr";
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
