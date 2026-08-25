@@ -45,6 +45,26 @@ describe("SEC-003: CORS allowlist", () => {
 
     expect(res.status).toBe(401);
   });
+
+  it("always accepts same-origin mutations even when not whitelisted", async () => {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("Host", "dosewise-84aw.onrender.com")
+      .set("Origin", "https://dosewise-84aw.onrender.com")
+      .set("X-Forwarded-For", "10.99.0.2")
+      .send({ email: "nobody-same-origin@example.com", password: "wrong-password" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects malformed Origin headers on mutations", async () => {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", "not-a-valid-origin")
+      .send({ email: "x@example.com", password: "y" });
+
+    expect(res.status).toBe(403);
+  });
 });
 
 describe("AUTH-008: login rate limiting and lockout", () => {

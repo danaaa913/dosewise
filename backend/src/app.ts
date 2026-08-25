@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { noCache } from "./middlewares/no-cache.js";
-import { allowedOrigins, isOriginAllowed, apiLimiter } from "./lib/rate-limit.js";
+import { isOriginAllowed, isMutationAllowed, apiLimiter } from "./lib/rate-limit.js";
 
 export const SESSION_COOKIE_NAME = "dosewise.sid";
 
@@ -48,7 +48,7 @@ app.use(
 );
 
 app.use((req, res, next) => {
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && !isOriginAllowed(req.headers.origin)) {
+  if (!isMutationAllowed(req.method, req.headers.origin, req.headers.host)) {
     res.status(403).json({ error: "Cross-origin request rejected" });
     return;
   }
