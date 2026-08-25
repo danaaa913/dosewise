@@ -26,6 +26,21 @@ export const translations = {
       pharmacies: "الصيدليات",
       medicines: "الأدوية",
     },
+    empty: {
+      browse: "لا توجد أدوية متاحة حالياً",
+      browseSearch: "لا توجد نتائج لـ",
+      myMedicines: "لا يوجد أدوية مسجلة بعد",
+      myMedicinesCta: "أضف أول دواء الآن",
+      requestsReceived: "لا توجد طلبات واردة",
+      requestsSent: "لم ترسل أي طلبات بعد",
+      notifications: "لا توجد إشعارات",
+      notificationsUnread: "لا توجد إشعارات غير مقروءة",
+      subscriptions: "لا توجد خطط اشتراك متاحة",
+    },
+    errors: {
+      query: "حدث خطأ أثناء تحميل البيانات",
+      retry: "إعادة المحاولة",
+    },
     analytics: {
       disclaimer: "هذه النتائج محسوبة من بيانات المنصة الفعلية (الطلبات والمخزون والأسعار) — وليست ذكاءً اصطناعياً ولا توصيات طبية. للاستشارة الدوائية راجع صيدلياً مختصاً.",
       pickMedicine: "اختر دواءً للتحليل",
@@ -80,6 +95,21 @@ export const translations = {
       contact: "Contact Us",
       pharmacies: "Pharmacies",
       medicines: "Medicines",
+    },
+    empty: {
+      browse: "No medicines available right now",
+      browseSearch: "No results for",
+      myMedicines: "No medicines registered yet",
+      myMedicinesCta: "Add your first medicine now",
+      requestsReceived: "No incoming requests",
+      requestsSent: "You haven't sent any requests yet",
+      notifications: "No notifications",
+      notificationsUnread: "No unread notifications",
+      subscriptions: "No subscription plans available",
+    },
+    errors: {
+      query: "Something went wrong loading data",
+      retry: "Try again",
     },
     analytics: {
       disclaimer: "These results are computed from actual platform data (orders, stock and prices) — they are not artificial intelligence nor medical advice. For medical guidance consult a licensed pharmacist.",

@@ -1,8 +1,14 @@
 ﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Search, Package, SearchX } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, formatPrice, type AvailableMedicine } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function BrowsePage() {
   const qc = useQueryClient();
@@ -14,7 +20,9 @@ export default function BrowsePage() {
   const [requestError, setRequestError] = useState("");
   const [requestSuccess, setRequestSuccess] = useState("");
 
-  const { data: medicines, isLoading } = useQuery({
+  const { t } = useLanguage();
+
+  const { data: medicines, isLoading, isError, refetch } = useQuery({
     queryKey: ["available-medicines", search],
     queryFn: () => api.medicines.available(search || undefined),
   });
@@ -110,13 +118,30 @@ export default function BrowsePage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
-      ) : !medicines?.length ? (
-        <div className="text-center py-16">
-          <p className="text-slate-500 text-sm">
-            {search ? `لا توجد نتائج لـ "${search}"` : "لا توجد أدوية متاحة حالياً"}
-          </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+              <div className="flex justify-between"><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-16" /></div>
+              <Skeleton className="h-3 w-40" />
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-36" />
+              <Skeleton className="h-8 w-full rounded-lg" />
+            </div>
+          ))}
         </div>
+      ) : isError ? (
+        <Alert variant="destructive">
+          <p>{t.errors.query}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>{t.errors.retry}</Button>
+        </Alert>
+      ) : !medicines?.length ? (
+        <Empty>
+          <EmptyMedia variant="icon">
+            {search ? <SearchX className="size-6" /> : <Package className="size-6" />}
+          </EmptyMedia>
+          <EmptyTitle>{search ? `${t.empty.browseSearch} "${search}"` : t.empty.browse}</EmptyTitle>
+          <EmptyDescription>{search ? "جرّب كلمات بحث مختلفة" : "ستظهر الأدوية المتاحة هنا فور إضافتها من قبل الصيدليات الأخرى"}</EmptyDescription>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {medicines.map((m) => (

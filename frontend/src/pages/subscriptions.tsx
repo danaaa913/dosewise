@@ -1,19 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CreditCard } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, type Plan } from "@/lib/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { useState } from "react";
 
 export default function SubscriptionsPage() {
   const qc = useQueryClient();
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
+  const { t } = useLanguage();
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["sub-status"],
     queryFn: api.subscriptions.status,
   });
 
-  const { data: plans, isLoading: plansLoading } = useQuery({
+  const { data: plans, isLoading: plansLoading, isError: plansError, refetch: plansRefetch } = useQuery({
     queryKey: ["sub-plans"],
     queryFn: api.subscriptions.plans,
   });
@@ -111,7 +118,26 @@ export default function SubscriptionsPage() {
 
       {/* Plans */}
       {plansLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border-2 border-slate-200 p-6 space-y-4">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-8 w-20" />
+              <div className="space-y-2">{Array.from({ length: 4 }).map((_, j) => <Skeleton key={j} className="h-4 w-full" />)}</div>
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          ))}
+        </div>
+      ) : plansError ? (
+        <Alert variant="destructive">
+          <p>{t.errors.query}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => plansRefetch()}>{t.errors.retry}</Button>
+        </Alert>
+      ) : !(plans?.plans?.length) ? (
+        <Empty>
+          <EmptyMedia variant="icon"><CreditCard className="size-6" /></EmptyMedia>
+          <EmptyTitle>{t.empty.subscriptions}</EmptyTitle>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {(plans?.plans ?? []).map((plan: Plan) => {

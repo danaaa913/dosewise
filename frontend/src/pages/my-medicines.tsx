@@ -1,7 +1,13 @@
 ﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pill, Plus } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, formatPrice, type Medicine } from "@/lib/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 type FormData = {
   name: string;
@@ -27,8 +33,9 @@ export default function MyMedicinesPage() {
   const [editing, setEditing] = useState<Medicine | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [formError, setFormError] = useState("");
+  const { t } = useLanguage();
 
-  const { data: medicines, isLoading } = useQuery({
+  const { data: medicines, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-medicines"],
     queryFn: api.medicines.my,
   });
@@ -231,14 +238,38 @@ export default function MyMedicinesPage() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
-      ) : !medicines?.length ? (
-        <div className="text-center py-16">
-          <p className="text-slate-500 text-sm">لا يوجد أدوية مسجلة بعد</p>
-          <button onClick={openAdd} className="mt-3 text-sm text-emerald-600 hover:underline">
-            أضف أول دواء الآن
-          </button>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{["اسم الدواء", "الكمية", "السعر", "انتهاء الصلاحية", "الحالة", "إجراءات"].map((h) => (
+                <th key={h} className="text-right px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wide">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <td key={j} className="px-5 py-3.5"><Skeleton className="h-4 w-full" /></td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      ) : isError ? (
+        <Alert variant="destructive">
+          <p>{t.errors.query}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>{t.errors.retry}</Button>
+        </Alert>
+      ) : !medicines?.length ? (
+        <Empty>
+          <EmptyMedia variant="icon"><Pill className="size-6" /></EmptyMedia>
+          <EmptyTitle>{t.empty.myMedicines}</EmptyTitle>
+          <EmptyDescription>{t.empty.myMedicinesCta}</EmptyDescription>
+          <EmptyContent>
+            <Button onClick={openAdd}><Plus className="size-4" /> {t.empty.myMedicinesCta}</Button>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">

@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Inbox, Send } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, type ExchangeRequest } from "@/lib/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   pending: { label: "معلق", cls: "bg-amber-100 text-amber-700" },
@@ -16,18 +22,19 @@ export default function RequestsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"received" | "sent">("received");
   const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
+  const { t } = useLanguage();
 
   const showFeedback = (text: string, isError = false) => {
     setFeedback({ text, isError });
     setTimeout(() => setFeedback(null), 3000);
   };
 
-  const { data: received, isLoading: loadingReceived } = useQuery({
+  const { data: received, isLoading: loadingReceived, isError: errReceived, refetch: refetchReceived } = useQuery({
     queryKey: ["requests-received"],
     queryFn: api.requests.received,
   });
 
-  const { data: sent, isLoading: loadingSent } = useQuery({
+  const { data: sent, isLoading: loadingSent, isError: errSent, refetch: refetchSent } = useQuery({
     queryKey: ["requests-sent"],
     queryFn: api.requests.sent,
   });
@@ -115,13 +122,29 @@ export default function RequestsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
-      ) : !requests.length ? (
-        <div className="text-center py-16">
-          <p className="text-slate-500 text-sm">
-            {tab === "received" ? "لا توجد طلبات واردة" : "لم ترسل أي طلبات بعد"}
-          </p>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+              <div className="flex gap-2"><Skeleton className="h-5 w-16 rounded-full" /><Skeleton className="h-3 w-24" /></div>
+              <Skeleton className="h-4 w-40" />
+              <div className="grid grid-cols-3 gap-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /></div>
+            </div>
+          ))}
         </div>
+      ) : (tab === "received" ? errReceived : errSent) ? (
+        <Alert variant="destructive">
+          <p>{t.errors.query}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => tab === "received" ? refetchReceived() : refetchSent()}>{t.errors.retry}</Button>
+        </Alert>
+      ) : !requests.length ? (
+        <Empty>
+          <EmptyMedia variant="icon">
+            {tab === "received" ? <Inbox className="size-6" /> : <Send className="size-6" />}
+          </EmptyMedia>
+          <EmptyTitle>
+            {tab === "received" ? t.empty.requestsReceived : t.empty.requestsSent}
+          </EmptyTitle>
+        </Empty>
       ) : (
         <div className="space-y-3">
           {requests.map((req) => {

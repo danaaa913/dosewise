@@ -1,13 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bell, BellOff } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, type Notification } from "@/lib/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { useState } from "react";
 
 export default function NotificationsPage() {
   const qc = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const { t } = useLanguage();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["notifications", unreadOnly],
     queryFn: () => api.notifications.my(unreadOnly),
     refetchInterval: 15000,
@@ -44,13 +51,26 @@ export default function NotificationsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
-      ) : !notifications.length ? (
-        <div className="text-center py-16">
-          <p className="text-slate-500 text-sm">
-            {unreadOnly ? "لا توجد إشعارات غير مقروءة" : "لا توجد إشعارات"}
-          </p>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4 rounded-xl border border-slate-200 bg-white flex gap-3">
+              <Skeleton className="w-2 h-2 rounded-full mt-1.5" />
+              <div className="flex-1 space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/4" /></div>
+            </div>
+          ))}
         </div>
+      ) : isError ? (
+        <Alert variant="destructive">
+          <p>{t.errors.query}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>{t.errors.retry}</Button>
+        </Alert>
+      ) : !notifications.length ? (
+        <Empty>
+          <EmptyMedia variant="icon">
+            {unreadOnly ? <BellOff className="size-6" /> : <Bell className="size-6" />}
+          </EmptyMedia>
+          <EmptyTitle>{unreadOnly ? t.empty.notificationsUnread : t.empty.notifications}</EmptyTitle>
+        </Empty>
       ) : (
         <div className="space-y-2">
           {notifications.map((n: Notification) => (

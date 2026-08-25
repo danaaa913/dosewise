@@ -1,23 +1,28 @@
 ﻿import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { Link } from "wouter";
 
 export default function DashboardPage() {
   const { pharmacy } = useAuth();
+  const { t } = useLanguage();
 
-  const { data: medicines } = useQuery({
+  const { data: medicines, isError: errMed, refetch: refMed } = useQuery({
     queryKey: ["my-medicines"],
     queryFn: api.medicines.my,
   });
 
-  const { data: sentRequests } = useQuery({
+  const { data: sentRequests, isError: errSent } = useQuery({
     queryKey: ["requests-sent"],
     queryFn: api.requests.sent,
   });
 
-  const { data: receivedRequests } = useQuery({
+  const { data: receivedRequests, isError: errRecv } = useQuery({
     queryKey: ["requests-received"],
     queryFn: api.requests.received,
   });
@@ -77,6 +82,8 @@ export default function DashboardPage() {
   };
 
   const pendingReceived = receivedRequests?.filter((r) => r.status === "pending") ?? [];
+  const isLoading = !medicines && !sentRequests && !receivedRequests;
+  const hasError = errMed || errSent || errRecv;
 
   return (
     <Layout title="لوحة التحكم">
@@ -123,17 +130,34 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {stats.map((s) => (
-          <Link
-            key={s.label}
-            href={s.href}
-            className={`block p-5 rounded-xl border ${colorMap[s.color]} hover:shadow-sm transition-shadow`}
-          >
-            <p className={`text-3xl font-bold ${valueColorMap[s.color]}`}>{s.value}</p>
-            <p className="text-sm font-medium text-slate-700 mt-1">{s.label}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{s.sub}</p>
-          </Link>
-        ))}
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-5 rounded-xl border border-slate-200 bg-white space-y-2">
+              <Skeleton className="h-8 w-12" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          ))
+        ) : hasError ? (
+          <div className="col-span-full">
+            <Alert variant="destructive">
+              <p>{t.errors.query}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => refMed()}>{t.errors.retry}</Button>
+            </Alert>
+          </div>
+        ) : (
+          stats.map((s) => (
+            <Link
+              key={s.label}
+              href={s.href}
+              className={`block p-5 rounded-xl border ${colorMap[s.color]} hover:shadow-sm transition-shadow`}
+            >
+              <p className={`text-3xl font-bold ${valueColorMap[s.color]}`}>{s.value}</p>
+              <p className="text-sm font-medium text-slate-700 mt-1">{s.label}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{s.sub}</p>
+            </Link>
+          ))
+        )}
       </div>
 
       {pendingReceived.length > 0 && (
