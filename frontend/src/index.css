@@ -149,7 +149,7 @@
   --chart-4: 200 45% 45%;
   --chart-5: 220 35% 35%;
 
-  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
+  --app-font-sans: 'Inter', 'IBM Plex Sans Arabic', ui-sans-serif, system-ui, sans-serif;
   --app-font-serif: 'Georgia', serif;
   --app-font-mono: 'Space Mono', monospace;
   --radius: 0.5rem;
@@ -214,5 +214,14 @@
     @apply font-sans antialiased bg-background text-foreground selection:bg-primary/20;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     overflow-x: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

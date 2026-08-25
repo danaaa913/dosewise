@@ -1,108 +1,137 @@
-import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useState, type FormEvent } from "react";
+import { Link } from "wouter";
+import { Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import brandLogo from "@assets/brand-logo.jpeg";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Logo } from "@/components/Logo";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function LoginPage() {
-  const [, navigate] = useLocation();
+  const { t } = useLanguage();
   const { refresh } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError("");
     setLoading(true);
+    setError(null);
     try {
-      await api.auth.login(form);
+      await api.auth.login({ email: email.trim(), password });
       await refresh();
-      navigate("/dashboard");
+      window.location.href = "/";
     } catch (err: any) {
-      setError(err.message || "فشل تسجيل الدخول");
+      setError(err.message || t.login.error);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#eaf2f3] via-[#f6fafa] to-white flex items-center justify-center p-4" dir="rtl">
-      <div className="w-full max-w-md">
-        {/* Brand */}
-        <div className="text-center mb-6">
-          <img
-            src={brandLogo}
-            alt="DoseWise"
-            className="mx-auto h-32 w-auto object-contain mb-2 select-none"
-            draggable={false}
-          />
-          <p className="text-[#1b3a5f]/70 text-sm">منصة تبادل الأدوية للصيدليات</p>
-          <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
-            <span aria-hidden>📍</span>
-            <span>الأردن (Jordan) · العملة JOD (د.أ)</span>
-          </span>
+    <div className="flex min-h-screen w-full">
+      {/* ── Brand half (desktop) ── */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-primary flex-col items-center justify-center p-12 text-primary-foreground overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/30 via-primary to-primary opacity-80" />
+        <div className="relative z-10 flex flex-col items-center text-center max-w-md">
+          <Logo size={80} className="mb-8 drop-shadow-lg" />
+          <h1 className="text-4xl font-bold mb-4 leading-tight">{t.login.brandDescription}</h1>
+          <p className="text-lg text-primary-foreground/80">{t.login.footer}</p>
+          <div className="mt-8 text-sm text-primary-foreground/60">{t.login.country}</div>
+        </div>
+      </div>
+
+      {/* ── Form half ── */}
+      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center px-6 py-12 bg-background">
+        {/* Top bar */}
+        <div className="absolute top-4 end-4">
+          <LanguageSwitcher />
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-          <h2 className="text-lg font-semibold text-slate-800 mb-6">تسجيل الدخول</h2>
+        <div className="w-full max-w-sm space-y-8">
+          {/* Mobile logo */}
+          <div className="flex flex-col items-center text-center lg:hidden">
+            <Logo size={56} className="mb-4" />
+          </div>
+
+          <div className="text-center space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight">{t.login.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.login.subtitle}</p>
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-              {error}
-            </div>
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">البريد الإلكتروني</label>
-              <input
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div className="space-y-1.5">
+              <label htmlFor="login-email" className="text-sm font-medium">{t.login.email}</label>
+              <Input
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="pharmacy@example.com"
-                dir="ltr"
+                dir="auto"
+                placeholder="name@pharmacy.jo"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">كلمة المرور</label>
-              <input
-                type="password"
-                required
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="••••••••"
-              />
+
+            <div className="space-y-1.5">
+              <label htmlFor="login-password" className="text-sm font-medium">{t.login.password}</label>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  name="password"
+                  type={showPw ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pe-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  tabIndex={-1}
+                  className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                >
+                  {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-            >
-              {loading ? "جاري التحقق..." : "دخول"}
-            </button>
+
+            <Button type="submit" disabled={loading} className="w-full" size="lg">
+              {loading ? <Spinner className="size-4" /> : t.login.submit}
+            </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-500">
-            ليس لديك حساب؟{" "}
-            <Link href="/register" className="text-emerald-600 font-medium hover:underline">
-              سجل صيدليتك
-            </Link>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-            <Link href="/admin" className="text-xs text-slate-400 hover:text-slate-600">
-              دخول المشرف
-            </Link>
+          <div className="space-y-3 text-center text-sm">
+            <p className="text-muted-foreground">
+              {t.login.noAccount}{" "}
+              <Link href="/register" className="font-medium text-primary hover:underline">
+                {t.login.registerLink}
+              </Link>
+            </p>
+            <p>
+              <Link href="/admin" className="text-muted-foreground hover:text-foreground hover:underline">
+                {t.login.adminLogin}
+              </Link>
+            </p>
           </div>
         </div>
-
-        <p className="text-center text-xs text-slate-400 mt-6">
-          منصة موثوقة لتبادل الأدوية بين صيدليات الأردن
-        </p>
       </div>
     </div>
   );

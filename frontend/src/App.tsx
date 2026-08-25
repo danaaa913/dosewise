@@ -1,4 +1,4 @@
-﻿import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
+﻿import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,13 +28,14 @@ const queryClient = new QueryClient({
 });
 
 function LoadingScreen() {
+  const { t } = useLanguage();
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center" dir="rtl">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center" dir={t.dir}>
       <div className="text-center">
         <div className="inline-block animate-pulse mb-4">
           <Logo size={48} />
         </div>
-        <p className="text-sm text-slate-500">جاري التحميل...</p>
+        <p className="text-sm text-slate-500">{t.loading}</p>
       </div>
     </div>
   );
@@ -49,9 +50,8 @@ function PharmacyRoute({ component: Component }: { component: React.ComponentTyp
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { loggedIn, isAdmin, loading } = useAuth();
-  const [, navigate] = useLocation();
   if (loading) return <LoadingScreen />;
-  if (!loggedIn || !isAdmin) { navigate("/admin"); return null; }
+  if (!loggedIn || !isAdmin) return <Redirect to="/admin" />;
   return <Component />;
 }
 
