@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Facebook,
   Instagram,
+  Info,
   Languages,
   Linkedin,
   Mail,
@@ -231,8 +232,8 @@ function Hero() {
   ];
 
   return (
-    <section aria-labelledby="hero-title" className="relative overflow-x-clip">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:py-24">
+    <section aria-labelledby="hero-title">
+      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-14 lg:grid-cols-2 lg:gap-14 lg:py-14">
         <div>
           <h1
             id="hero-title"
@@ -240,15 +241,15 @@ function Hero() {
           >
             {t.landing.hero.title}
           </h1>
-          <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
             {withBrand(t.landing.hero.subtitle)}
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-7 flex flex-wrap items-center gap-3">
             <HeroCta />
           </div>
 
-          <ul className="mt-8 flex flex-wrap gap-2.5">
+          <ul className="mt-6 flex flex-wrap gap-2.5">
             {badges.map((badge) => (
               <li
                 key={badge}
@@ -304,63 +305,63 @@ function ContactSection() {
     <section
       id="contact-section"
       aria-labelledby="contact-heading"
-      className="scroll-mt-24 border-y border-border/60 bg-secondary/30 py-16 lg:py-20"
+      className="scroll-mt-24 border-y border-border/60 bg-secondary/30 py-14 sm:py-16 lg:py-20"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto max-w-xl text-center">
+        <div className="mx-auto mt-8 max-w-xl text-center">
           <h2 id="contact-heading" className="text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl">
             {t.landing.contact.title}
           </h2>
           <p className="mt-3 text-slate-600">{t.landing.contact.subtitle}</p>
         </div>
 
-        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-border bg-background p-6 shadow-sm sm:p-8">
-          <a
-            href={`mailto:${CONTACT.email}`}
-            className={cn(
-              "group -m-2 flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-secondary/40",
-              focusRing
-            )}
-          >
-            <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
-              <Mail className="size-5" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">
-                {t.landing.contact.emailLabel}
+        <div className="mx-auto mt-8 max-w-4xl overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+          <div className="grid divide-y divide-border/60 sm:grid-cols-2 lg:grid-cols-3 lg:divide-y-0 lg:divide-x">
+            <a
+              href={`mailto:${CONTACT.email}`}
+              className={cn(
+                "group flex items-center gap-3 p-6 transition-colors hover:bg-secondary/30",
+                focusRing
+              )}
+            >
+              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
+                <Mail className="size-5" aria-hidden="true" />
               </span>
-              <span dir="ltr" className="block truncate text-sm font-semibold text-[#1b3a5f] group-hover:underline">
-                {CONTACT.email}
+              <span className="min-w-0">
+                <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {t.landing.contact.emailLabel}
+                </span>
+                <span dir="ltr" className="block truncate text-sm font-semibold text-[#1b3a5f] group-hover:underline">
+                  {CONTACT.email}
+                </span>
               </span>
-            </span>
-          </a>
+            </a>
 
-          <div className="my-5 border-t border-border/60" />
-
-          <a
-            href={CONTACT.linktree}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={t.landing.contact.linktreeAria}
-            className={cn(
-              "group -m-2 flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-secondary/40",
-              focusRing
-            )}
-          >
-            <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
-              <ExternalLink className="size-5" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-[#1b3a5f] group-hover:underline">
-                Linktree
+            <a
+              href={CONTACT.linktree}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t.landing.contact.linktreeAria}
+              className={cn(
+                "group flex items-center gap-3 p-6 transition-colors hover:bg-secondary/30",
+                focusRing
+              )}
+            >
+              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
+                <ExternalLink className="size-5" aria-hidden="true" />
               </span>
-              <span className="block text-xs text-slate-500">{t.landing.contact.linktreeLabel}</span>
-            </span>
-          </a>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#1b3a5f] group-hover:underline">
+                  Linktree
+                </span>
+                <span className="block text-xs leading-relaxed text-slate-500">{t.landing.contact.linktreeLabel}</span>
+              </span>
+            </a>
 
-          <div className="my-5 border-t border-border/60" />
-
-          <SocialLinks className="justify-center" />
+            <div className="flex items-center justify-center p-6">
+              <SocialLinks />
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -369,26 +370,39 @@ function ContactSection() {
 
 function AboutSection() {
   const { t } = useLanguage();
+  const points = [
+    { icon: Info, text: t.landing.about.p1 },
+    { icon: Check, text: t.landing.about.p2 },
+  ];
 
   return (
     <section
       id="about-section"
       aria-labelledby="about-heading"
-      className="scroll-mt-24 py-16 lg:py-20"
+      className="scroll-mt-24 py-14 sm:py-16 lg:py-20"
     >
-      <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-        <h2
-          id="about-heading"
-          className="text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
-        >
-          {t.landing.about.title}
-        </h2>
-        <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg">
-          {withBrand(t.landing.about.p1)}
-        </p>
-        <p className="mt-4 text-base leading-relaxed text-slate-600">
-          {withBrand(t.landing.about.p2)}
-        </p>
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-14">
+        <div>
+          <span aria-hidden="true" className="mb-4 block h-1 w-12 rounded-full bg-[#3f8b8e]" />
+          <h2
+            id="about-heading"
+            className="text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
+          >
+            {t.landing.about.title}
+          </h2>
+        </div>
+
+        <ul className="space-y-4">
+          {points.map(({ icon: Icon, text }) => (
+            <li
+              key={text}
+              className="flex items-start gap-3 rounded-xl border border-border bg-secondary/30 p-5"
+            >
+              <Icon className="mt-0.5 size-5 shrink-0 text-[#2a5f66]" aria-hidden="true" />
+              <p className="text-base leading-relaxed text-slate-700">{withBrand(text)}</p>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -403,7 +417,7 @@ function HowSection() {
     <section
       id="how-it-works"
       aria-labelledby="how-heading"
-      className="scroll-mt-24 border-y border-border/60 bg-secondary/30 py-16 lg:py-20"
+      className="scroll-mt-24 border-y border-border/60 bg-secondary/30 py-14 sm:py-16 lg:py-20"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2
@@ -413,13 +427,13 @@ function HowSection() {
           {withBrand(t.landing.how.title)}
         </h2>
 
-        <ol className="mt-10 grid gap-6 md:grid-cols-3">
+        <ol className="mt-8 grid gap-6 md:grid-cols-3">
           {t.landing.how.steps.map((step, i) => {
             const Icon = HOW_ICONS[i];
             return (
               <li
                 key={step.title}
-                className="rounded-xl border border-border bg-background p-6 shadow-sm"
+                className="h-full rounded-xl border border-border bg-background p-5 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
@@ -427,7 +441,7 @@ function HowSection() {
                   </span>
                   <span
                     aria-hidden="true"
-                    className="text-xl font-bold text-[#3f8b8e]"
+                    className="grid size-7 place-items-center rounded-full bg-[#2a5f66] text-sm font-bold text-white"
                   >
                     {i + 1}
                   </span>
@@ -460,7 +474,7 @@ function FeaturesSection() {
   const { t } = useLanguage();
 
   return (
-    <section id="features" aria-labelledby="features-heading" className="scroll-mt-24 py-16 lg:py-20">
+    <section id="features" aria-labelledby="features-heading" className="scroll-mt-24 py-14 sm:py-16 lg:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2
           id="features-heading"
@@ -469,13 +483,13 @@ function FeaturesSection() {
           {withBrand(t.landing.features.title)}
         </h2>
 
-        <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {t.landing.features.items.map((item, i) => {
             const Icon = FEATURE_ICONS[i];
             return (
               <li
                 key={item.title}
-                className="rounded-xl border border-border bg-background p-6 shadow-sm"
+                className="rounded-xl border border-border bg-background p-5 shadow-sm transition-colors hover:border-[#3f8b8e]/40 hover:bg-secondary/20"
               >
                 <span className="inline-flex size-11 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
                   <Icon className="size-5" aria-hidden="true" />
@@ -501,9 +515,9 @@ function TrustSection() {
   return (
     <section
       aria-labelledby="trust-heading"
-      className="border-y border-border/60 bg-secondary/30 py-16 lg:py-20"
+      className="border-y border-border/60 bg-secondary/30 py-14 sm:py-16 lg:py-20"
     >
-      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6">
         <div className="flex items-center justify-center gap-3">
           <ShieldCheck className="size-7 text-[#2a5f66]" aria-hidden="true" />
           <h2
@@ -514,11 +528,11 @@ function TrustSection() {
           </h2>
         </div>
 
-        <ul className="mt-8 space-y-3">
+        <ul className="mt-7 grid gap-3.5 sm:grid-cols-2">
           {t.landing.trust.items.map((item) => (
             <li
               key={item}
-              className="flex items-start gap-3 rounded-xl border border-border bg-background p-4"
+              className="flex items-start gap-2.5 rounded-xl border border-border bg-background p-4"
             >
               <Check className="mt-0.5 size-4 shrink-0 text-[#2a5f66]" aria-hidden="true" />
               <span className="text-sm leading-relaxed text-slate-700">{item}</span>
@@ -535,7 +549,7 @@ function FinalCtaSection() {
   const { loggedIn, isAdmin } = useAuth();
 
   return (
-    <section aria-labelledby="finalcta-heading" className="bg-[#1b3a5f] py-16 lg:py-20">
+    <section aria-labelledby="finalcta-heading" className="bg-[#1b3a5f] py-12 sm:py-14">
       <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
         <h2
           id="finalcta-heading"
@@ -581,7 +595,7 @@ function Footer() {
 
   return (
     <footer className="bg-background">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-3">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-9 sm:px-6 md:grid-cols-3">
         <div>
           <div className="flex items-center gap-2">
             <BrandRow />
@@ -641,11 +655,11 @@ function Footer() {
               </a>
             </li>
           </ul>
-          <SocialLinks className="mt-4" />
+          <SocialLinks className="mt-3" />
         </div>
       </div>
 
-      <div className="border-t border-border/60 py-4">
+      <div className="border-t border-border/60 py-3">
         <p className="px-4 text-center text-sm text-slate-500">
           © {year} DoseWise. {t.landing.footer.rightsNote}
         </p>
