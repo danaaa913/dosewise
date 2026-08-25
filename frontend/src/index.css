@@ -226,3 +226,22 @@
     scroll-behavior: auto !important;
   }
 }
+
+@keyframes dw-float {
+  0%, 100% { transform: translate3d(0, -8px, 0); }
+  50% { transform: translate3d(0, 8px, 0); }
+}
+
+@keyframes dw-orbit {
+  from { transform: rotateX(72deg) rotateZ(0deg); }
+  to { transform: rotateX(72deg) rotateZ(360deg); }
+}
+
+@keyframes dw-orbit-rev {
+  from { transform: rotateX(64deg) rotateZ(360deg); }
+  to { transform: rotateX(64deg) rotateZ(0deg); }
+}
+
+.dw-float { animation: dw-float 7s ease-in-out infinite; will-change: transform; }
+.dw-orbit { animation: dw-orbit 42s linear infinite; will-change: transform; }
+.dw-orbit-rev { animation: dw-orbit-rev 58s linear infinite; will-change: transform; }

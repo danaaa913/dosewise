@@ -80,6 +80,73 @@ export const translations = {
         contactTitle: "تواصل",
         rightsNote: "جميع الحقوق محفوظة.",
       },
+      about: {
+        title: "عن المنصة",
+        p1: "DoseWise منصة أعمال تربط الصيدليات في الأردن ضمن شبكة واحدة لتبادل المخزون الدوائي المتوفر بينها.",
+        p2: "بملف موثق لكل صيدلية وسجل واضح لكل طلب، تسهّل المنصة على الصيادلة الوصول إلى البدائل المتاحة وتقليل الفاقد الدوائي.",
+      },
+      how: {
+        title: "كيف تعمل DoseWise؟",
+        steps: [
+          {
+            title: "أضف مخزونك المتاح",
+            desc: "سجّل الأدوية المتوفرة لديك مع الكمية والسعر وتاريخ الانتهاء.",
+          },
+          {
+            title: "ابحث عن الدواء المطلوب",
+            desc: "تصفح مخازن الصيدليات الموثقة واعثر على البديل المناسب.",
+          },
+          {
+            title: "أرسل طلب التبادل وتابع حالته",
+            desc: "طلب موثق مع إشعارات حتى إتمام العملية.",
+          },
+        ],
+      },
+      features: {
+        title: "لماذا DoseWise؟",
+        items: [
+          {
+            title: "تقليل هدر الأدوية",
+            desc: "حوّل الفائض لديك إلى قيمة بدل انتهاء صلاحيته على الرف.",
+          },
+          {
+            title: "الوصول إلى مخزون الصيدليات",
+            desc: "اعرف ما هو متاح فعلًا لدى الصيدليات قبل أن ينفد.",
+          },
+          {
+            title: "طلبات تبادل موثقة",
+            desc: "كل طلب له حالة وسجل واضح بين الطرفين.",
+          },
+          {
+            title: "متابعة وإشعارات",
+            desc: "تنبيهات عند تحديث طلباتك.",
+          },
+          {
+            title: "صيدليات يتم التحقق منها",
+            desc: "تفعيل التبادل بعد مراجعة الإدارة لحساب الصيدلية.",
+          },
+          {
+            title: "تجربة عربية وإنجليزية",
+            desc: "واجهة كاملة بلغتك مع دعم RTL.",
+          },
+        ],
+      },
+      trust: {
+        title: "الشفافية أولًا",
+        items: [
+          "المنصة مخصصة لتبادل المخزون بين الصيدليات فقط — وليست صيدلية للجمهور.",
+          "لا نقدم استشارات طبية؛ القرارات الدوائية تبقى لمختصي الصيدلة.",
+          "جميع العمليات تتم بين حسابات صيدليات موثقة على المنصة.",
+          "الاشتراكات حاليًا في وضع تجريبي (Demo) ولا تتم أي عملية دفع فعلية.",
+        ],
+      },
+      finalCta: {
+        title: "جاهز تربط صيدليتك بشبكة DoseWise؟",
+        subtitle: "أنشئ حساب صيدليتك، وبعد مراجعة الإدارة ابدأ التبادل مع شبكة الصيدليات.",
+      },
+      a11y: {
+        skipToContent: "تجاوز إلى المحتوى",
+      },
     },
     login: {
       title: "تسجيل الدخول",
@@ -214,6 +281,73 @@ export const translations = {
         sectionsTitle: "Page sections",
         contactTitle: "Contact",
         rightsNote: "All rights reserved.",
+      },
+      about: {
+        title: "About the platform",
+        p1: "DoseWise is a business platform connecting pharmacies across Jordan in one network to exchange available medicine inventory.",
+        p2: "With a verified profile for every pharmacy and a clear record of every request, the platform helps pharmacists reach available alternatives and cut medicine waste.",
+      },
+      how: {
+        title: "How does DoseWise work?",
+        steps: [
+          {
+            title: "List your available stock",
+            desc: "Add the medicines you have with quantity, price and expiry date.",
+          },
+          {
+            title: "Find the medicine you need",
+            desc: "Browse verified pharmacy stock and locate the right alternative.",
+          },
+          {
+            title: "Send the exchange request and track it",
+            desc: "A documented request with notifications until completion.",
+          },
+        ],
+      },
+      features: {
+        title: "Why DoseWise?",
+        items: [
+          {
+            title: "Reduce medicine waste",
+            desc: "Turn your surplus into value instead of expiring on the shelf.",
+          },
+          {
+            title: "Reach pharmacy stock",
+            desc: "See what is actually available before it runs out.",
+          },
+          {
+            title: "Documented exchange requests",
+            desc: "Every request has a clear status and record between both parties.",
+          },
+          {
+            title: "Tracking and notifications",
+            desc: "Alerts when your requests are updated.",
+          },
+          {
+            title: "Verified pharmacies",
+            desc: "Exchange unlocks after admin review of each pharmacy account.",
+          },
+          {
+            title: "Arabic and English experience",
+            desc: "A fully localized interface with RTL support.",
+          },
+        ],
+      },
+      trust: {
+        title: "Transparency first",
+        items: [
+          "The platform is for inventory exchange between pharmacies only — not a public pharmacy.",
+          "We do not provide medical advice; medicine decisions remain with licensed pharmacists.",
+          "All transactions happen between verified pharmacy accounts on the platform.",
+          "Subscriptions are currently in demo mode and no real payments are processed.",
+        ],
+      },
+      finalCta: {
+        title: "Ready to connect your pharmacy to the DoseWise network?",
+        subtitle: "Create your pharmacy account, and after admin review start exchanging with the network.",
+      },
+      a11y: {
+        skipToContent: "Skip to content",
       },
     },
     login: {

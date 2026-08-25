@@ -1,13 +1,22 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
+  ArrowLeftRight,
+  Bell,
   Check,
+  ClipboardList,
   ExternalLink,
   Facebook,
   Instagram,
+  Languages,
   Linkedin,
   Mail,
   Menu,
+  Package,
+  Recycle,
+  Search,
+  ShieldCheck,
+  Warehouse,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -21,6 +30,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { LogoShowcase } from "@/components/landing/LogoShowcase";
 import { CONTACT } from "@/config/contact";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +44,12 @@ const NAV_LINKS = [
 type SectionId = (typeof NAV_LINKS)[number]["id"];
 type SectionKey = (typeof NAV_LINKS)[number]["key"];
 
-const AVAILABLE_SECTIONS = new Set<SectionId>(["contact-section"]);
+const AVAILABLE_SECTIONS = new Set<SectionId>([
+  "about-section",
+  "how-it-works",
+  "features",
+  "contact-section",
+]);
 const sectionLinks = NAV_LINKS.filter((l) => AVAILABLE_SECTIONS.has(l.id));
 
 const focusRing =
@@ -206,27 +221,6 @@ function Navbar() {
   );
 }
 
-function HeroVisualPlaceholder() {
-  const { t } = useLanguage();
-  return (
-    <div
-      className="relative mx-auto flex aspect-square w-full max-w-sm items-center justify-center lg:max-w-md"
-      role="img"
-      aria-label={t.landing.hero.visualAlt}
-    >
-      <div
-        aria-hidden="true"
-        className="absolute size-56 rounded-full bg-[#3f8b8e]/15 blur-3xl sm:size-72"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute size-44 rounded-full border border-[#3f8b8e]/25 sm:size-56"
-      />
-      <Logo size={170} className="relative drop-shadow-xl" />
-    </div>
-  );
-}
-
 function Hero() {
   const { t } = useLanguage();
   const badges = [
@@ -267,7 +261,7 @@ function Hero() {
           </ul>
         </div>
 
-        <HeroVisualPlaceholder />
+        <LogoShowcase alt={t.landing.hero.visualAlt} />
       </div>
     </section>
   );
@@ -373,6 +367,214 @@ function ContactSection() {
   );
 }
 
+function AboutSection() {
+  const { t } = useLanguage();
+
+  return (
+    <section
+      id="about-section"
+      aria-labelledby="about-heading"
+      className="scroll-mt-24 py-16 lg:py-20"
+    >
+      <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+        <h2
+          id="about-heading"
+          className="text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
+        >
+          {t.landing.about.title}
+        </h2>
+        <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg">
+          {withBrand(t.landing.about.p1)}
+        </p>
+        <p className="mt-4 text-base leading-relaxed text-slate-600">
+          {withBrand(t.landing.about.p2)}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+const HOW_ICONS = [Package, Search, ArrowLeftRight] as const;
+
+function HowSection() {
+  const { t } = useLanguage();
+
+  return (
+    <section
+      id="how-it-works"
+      aria-labelledby="how-heading"
+      className="scroll-mt-24 border-y border-border/60 bg-secondary/30 py-16 lg:py-20"
+    >
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <h2
+          id="how-heading"
+          className="text-center text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
+        >
+          {withBrand(t.landing.how.title)}
+        </h2>
+
+        <ol className="mt-10 grid gap-6 md:grid-cols-3">
+          {t.landing.how.steps.map((step, i) => {
+            const Icon = HOW_ICONS[i];
+            return (
+              <li
+                key={step.title}
+                className="rounded-xl border border-border bg-background p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
+                    <Icon className="size-5" aria-hidden="true" />
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="text-xl font-bold text-[#3f8b8e]"
+                  >
+                    {i + 1}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-[#1b3a5f]">
+                  {step.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  {step.desc}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+const FEATURE_ICONS = [
+  Recycle,
+  Warehouse,
+  ClipboardList,
+  Bell,
+  ShieldCheck,
+  Languages,
+] as const;
+
+function FeaturesSection() {
+  const { t } = useLanguage();
+
+  return (
+    <section id="features" aria-labelledby="features-heading" className="scroll-mt-24 py-16 lg:py-20">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <h2
+          id="features-heading"
+          className="text-center text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
+        >
+          {withBrand(t.landing.features.title)}
+        </h2>
+
+        <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {t.landing.features.items.map((item, i) => {
+            const Icon = FEATURE_ICONS[i];
+            return (
+              <li
+                key={item.title}
+                className="rounded-xl border border-border bg-background p-6 shadow-sm"
+              >
+                <span className="inline-flex size-11 items-center justify-center rounded-full bg-secondary/60 text-[#2a5f66]">
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 text-base font-semibold text-[#1b3a5f]">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  {item.desc}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function TrustSection() {
+  const { t } = useLanguage();
+
+  return (
+    <section
+      aria-labelledby="trust-heading"
+      className="border-y border-border/60 bg-secondary/30 py-16 lg:py-20"
+    >
+      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+        <div className="flex items-center justify-center gap-3">
+          <ShieldCheck className="size-7 text-[#2a5f66]" aria-hidden="true" />
+          <h2
+            id="trust-heading"
+            className="text-2xl font-bold tracking-tight text-[#1b3a5f] sm:text-3xl"
+          >
+            {t.landing.trust.title}
+          </h2>
+        </div>
+
+        <ul className="mt-8 space-y-3">
+          {t.landing.trust.items.map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-3 rounded-xl border border-border bg-background p-4"
+            >
+              <Check className="mt-0.5 size-4 shrink-0 text-[#2a5f66]" aria-hidden="true" />
+              <span className="text-sm leading-relaxed text-slate-700">{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function FinalCtaSection() {
+  const { t } = useLanguage();
+  const { loggedIn, isAdmin } = useAuth();
+
+  return (
+    <section aria-labelledby="finalcta-heading" className="bg-[#1b3a5f] py-16 lg:py-20">
+      <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+        <h2
+          id="finalcta-heading"
+          className="text-2xl font-bold tracking-tight text-white sm:text-3xl"
+        >
+          {withBrand(t.landing.finalCta.title)}
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl leading-relaxed text-white/75">
+          {t.landing.finalCta.subtitle}
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          {loggedIn ? (
+            <Button asChild size="lg" className="min-h-[48px] bg-white text-[#1b3a5f] hover:bg-white/90">
+              <Link href={isAdmin ? "/admin/dashboard" : "/dashboard"}>
+                {isAdmin ? t.landing.cta.adminPanel : t.landing.cta.dashboard}
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild size="lg" className="min-h-[48px] bg-white text-[#1b3a5f] hover:bg-white/90">
+                <Link href="/register">{t.landing.cta.register}</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="min-h-[48px] border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white hover:[border-color:var(--button-outline)]"
+              >
+                <Link href="/login">{t.landing.cta.login}</Link>
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   const { t } = useLanguage();
   const year = new Date().getFullYear();
@@ -464,10 +666,25 @@ export default function LandingPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <a
+        href="#main-content"
+        className={cn(
+          "sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#1b3a5f] focus:shadow-md",
+          focusRing
+        )}
+      >
+        {t.landing.a11y.skipToContent}
+      </a>
+
       <Navbar />
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         <Hero />
+        <AboutSection />
+        <HowSection />
+        <FeaturesSection />
+        <TrustSection />
         <ContactSection />
+        <FinalCtaSection />
       </main>
       <Footer />
     </div>
