@@ -15,7 +15,7 @@ async function registerPharmacy(): Promise<{ agent: request.Agent; email: string
   counter += 1;
   const email = `life-${stamp}-${counter}@example.com`;
   createdPharmacyEmails.push(email);
-  await request(app).post("/api/auth/register").send({
+  const reg = await request(app).post("/api/auth/register").send({
     name: `Lifecycle Pharmacy ${counter}`,
     managerName: "Tester",
     email,
@@ -24,10 +24,22 @@ async function registerPharmacy(): Promise<{ agent: request.Agent; email: string
     address: "Test St.",
     password: "password123456",
   }).expect(201);
+  await approvePharmacy(reg.body.pharmacy.id);
 
   const agent = request.agent(app);
   await agent.post("/api/auth/login").send({ email, password: "password123456" }).expect(200);
   return { agent, email };
+}
+
+
+async function approvePharmacy(pharmacyId: number) {
+  const admin = request.agent(app);
+  await admin.post("/api/admin/login").send({
+    email: process.env.ADMIN_EMAIL!,
+    password: process.env.ADMIN_PASSWORD!,
+  }).expect(200);
+  await admin.post(`/api/admin/pharmacies/${pharmacyId}/verification`)
+    .send({ decision: "approve" }).expect(200);
 }
 
 async function addMedicine(agent: request.Agent) {

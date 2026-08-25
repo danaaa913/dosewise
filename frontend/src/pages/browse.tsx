@@ -2,11 +2,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { api, formatPrice, type AvailableMedicine } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function BrowsePage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [requesting, setRequesting] = useState<AvailableMedicine | null>(null);
+  const { pharmacy } = useAuth();
+  const notVerified = pharmacy?.verificationStatus !== "approved";
   const [qty, setQty] = useState("1");
   const [requestError, setRequestError] = useState("");
   const [requestSuccess, setRequestSuccess] = useState("");
@@ -88,10 +91,10 @@ export default function BrowsePage() {
               <div className="flex gap-3 mt-4">
                 <button
                   onClick={() => sendMut.mutate()}
-                  disabled={sendMut.isPending}
+                  disabled={sendMut.isPending || notVerified}
                   className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
                 >
-                  {sendMut.isPending ? "Ø¬Ø§Ø±ÙŠ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„..." : "Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨"}
+                  {notVerified ? "الإرسال متاح بعد اعتماد الصيدلية" : sendMut.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
                 </button>
                 <button
                   onClick={() => { setRequesting(null); setRequestError(""); }}

@@ -33,6 +33,14 @@ export const UpdateLicenseBody = zod.object({
   licenseDoc: LicenseDocumentInput.optional(),
 });
 
+export const VerificationDecisionBody = zod.object({
+  decision: zod.enum(["approve", "reject"]),
+  reason: zod.string().min(5).max(500).optional(),
+}).refine(
+  (data) => data.decision === "approve" || (data.reason !== undefined && data.reason.trim().length >= 5),
+  { message: "A rejection reason (min 5 chars) is required", path: ["reason"] },
+);
+
 export const LoginPharmacyBody = zod.object({
   email: zod.string().email(),
   password: zod.string().min(1),

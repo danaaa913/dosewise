@@ -13,6 +13,8 @@ function pharmacyPayload(p: typeof pharmaciesTable.$inferSelect) {
     id: p.id, name: p.name, managerName: p.managerName,
     email: p.email, phone: p.phone, city: p.city,
     address: p.address, isActive: p.isActive, isSubscribed: p.isSubscribed,
+    verificationStatus: p.verificationStatus,
+    rejectionReason: p.rejectionReason,
     subscriptionPlan: p.subscriptionPlan ?? null,
     subscriptionEndDate: p.subscriptionEndDate ? p.subscriptionEndDate.toISOString() : null,
   };

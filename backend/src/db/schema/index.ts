@@ -4,3 +4,4 @@ export * from "./medicines.js";
 export * from "./requests.js";
 export * from "./subscriptions.js";
 export * from "./notifications.js";
+export * from "./audit.js";

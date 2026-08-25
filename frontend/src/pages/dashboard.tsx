@@ -80,6 +80,16 @@ export default function DashboardPage() {
 
   return (
     <Layout title="Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…">
+      {pharmacy?.verificationStatus === "pending" && (
+        <div className="mb-5 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
+          <span className="font-bold">⏳ حسابك قيد المراجعة:</span> سيراجع فريق DoseWise سجلكم التجاري قريباً. يمكنك إدارة مخزونك، لكن إرسال الطلبات سيُتاح بعد الاعتماد.
+        </div>
+      )}
+      {pharmacy?.verificationStatus === "rejected" && (
+        <div className="mb-5 p-4 bg-red-50 border border-red-300 rounded-lg text-sm text-red-700">
+          <span className="font-bold">✖ تم رفض اعتماد صيدليتكم.</span> السبب: {pharmacy.rejectionReason ?? "غير محدد"} — يمكنك تحديث بياناتكم والتواصل مع الدعم لإعادة المراجعة.
+        </div>
+      )}
       <div className="mb-6">
         <h3 className="text-xl font-semibold text-slate-800">Ù…Ø±Ø­Ø¨Ø§Ù‹ØŒ {pharmacy?.name}</h3>
         <p className="text-sm text-slate-500 mt-1">Ø¥Ù„ÙŠÙƒ Ù…Ù„Ø®Øµ Ù†Ø´Ø§Ø· ØµÙŠØ¯Ù„ÙŠØªÙƒ</p>

@@ -3,15 +3,13 @@ import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable 
 import { eq, and, gte, sql } from "drizzle-orm";
 import { SendRequestBody, AcceptRequestParams, RejectRequestParams, RequestIdParams } from "../zod/schemas.js";
 import { canTransition, type RequestStatus } from "../lib/request-state.js";
+import { requireVerifiedPharmacy } from "../middlewares/require-verified-pharmacy.js";
 
 const router: IRouter = Router();
 
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
 
-router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> => {
+
+router.post("/requests/send", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const parsed = SendRequestBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -72,7 +70,7 @@ router.post("/requests/send", requirePharmacy, async (req, res): Promise<void> =
   });
 });
 
-router.get("/requests/sent", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/requests/sent", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const requests = await db
     .select({
       id: requestsTable.id, requesterPharmacyId: requestsTable.requesterPharmacyId,
@@ -97,7 +95,7 @@ router.get("/requests/sent", requirePharmacy, async (req, res): Promise<void> =>
   res.json(withNames);
 });
 
-router.get("/requests/received", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/requests/received", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const requests = await db
     .select({
       id: requestsTable.id, requesterPharmacyId: requestsTable.requesterPharmacyId,
@@ -122,7 +120,7 @@ router.get("/requests/received", requirePharmacy, async (req, res): Promise<void
   res.json(withNames);
 });
 
-router.post("/requests/:requestId/accept", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/requests/:requestId/accept", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const params = AcceptRequestParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -173,7 +171,7 @@ router.post("/requests/:requestId/accept", requirePharmacy, async (req, res): Pr
   res.status(status!).json(body!);
 });
 
-router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/requests/:requestId/reject", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const params = RejectRequestParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -194,7 +192,7 @@ router.post("/requests/:requestId/reject", requirePharmacy, async (req, res): Pr
   res.json({ message: "Request rejected" });
 });
 
-router.post("/requests/:requestId/cancel", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/requests/:requestId/cancel", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const params = RequestIdParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -232,7 +230,7 @@ router.post("/requests/:requestId/cancel", requirePharmacy, async (req, res): Pr
   res.status(status!).json(body!);
 });
 
-router.post("/requests/:requestId/complete", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/requests/:requestId/complete", requireVerifiedPharmacy, async (req, res): Promise<void> => {
   const params = RequestIdParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 

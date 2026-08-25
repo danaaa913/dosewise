@@ -44,6 +44,12 @@ export const api = {
     pharmacies: () => request<AdminPharmacy[]>("/admin/pharmacies"),
     medicines: () => request<AdminMedicine[]>("/admin/medicines"),
     stats: () => request<AdminStats>("/admin/stats"),
+    licenseDocumentUrl: (pharmacyId: number) => `/api/admin/pharmacies/${pharmacyId}/license-document`,
+    decideVerification: (pharmacyId: number, decision: "approve" | "reject", reason?: string) =>
+      request(`/admin/pharmacies/${pharmacyId}/verification`, {
+        method: "POST",
+        body: JSON.stringify({ decision, reason }),
+      }),
   },
   medicines: {
     add: (data: {
@@ -144,6 +150,8 @@ export interface Pharmacy {
   address: string;
   isActive: boolean;
   isSubscribed: boolean;
+  verificationStatus: "pending" | "approved" | "rejected";
+  rejectionReason: string | null;
   subscriptionPlan: string | null;
   subscriptionEndDate: string | null;
 }
@@ -223,6 +231,12 @@ export interface AdminPharmacy {
   city: string;
   isActive: boolean;
   isSubscribed: boolean;
+  verificationStatus: "pending" | "approved" | "rejected";
+  rejectionReason: string | null;
+  licenseNumber: string | null;
+  hasLicenseDoc: boolean;
+  licenseDocName: string | null;
+  licenseDocMime: string | null;
   subscriptionPlan: string | null;
   createdAt: string;
 }

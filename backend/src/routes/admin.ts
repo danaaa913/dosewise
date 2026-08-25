@@ -1,8 +1,8 @@
 ﻿import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable } from "../db/index.js";
+import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable, notificationsTable, auditLogsTable } from "../db/index.js";
 import { eq, count } from "drizzle-orm";
-import { AdminLoginBody } from "../zod/schemas.js";
+import { AdminLoginBody, VerificationDecisionBody } from "../zod/schemas.js";
 import { loginLimiter } from "../lib/rate-limit.js";
 
 const router: IRouter = Router();
@@ -37,8 +37,77 @@ router.get("/admin/pharmacies", requireAdmin, async (_req, res): Promise<void> =
   res.json(pharmacies.map(p => ({
     id: p.id, name: p.name, managerName: p.managerName, email: p.email,
     phone: p.phone, city: p.city, isActive: p.isActive, isSubscribed: p.isSubscribed,
+    verificationStatus: p.verificationStatus, rejectionReason: p.rejectionReason,
+    licenseNumber: p.licenseNumber, hasLicenseDoc: Boolean(p.licenseDocData),
+    licenseDocName: p.licenseDocName, licenseDocMime: p.licenseDocMime,
     subscriptionPlan: p.subscriptionPlan ?? null, createdAt: p.createdAt.toISOString(),
   })));
+});
+
+router.get("/admin/pharmacies/:pharmacyId/license-document", requireAdmin, async (req, res): Promise<void> => {
+  const pharmacyId = Number(req.params.pharmacyId);
+  if (!Number.isInteger(pharmacyId) || pharmacyId < 1) { res.status(400).json({ error: "Invalid pharmacy id" }); return; }
+
+  const [pharmacy] = await db.select({
+    licenseDocName: pharmaciesTable.licenseDocName,
+    licenseDocMime: pharmaciesTable.licenseDocMime,
+    licenseDocData: pharmaciesTable.licenseDocData,
+  }).from(pharmaciesTable).where(eq(pharmaciesTable.id, pharmacyId));
+
+  if (!pharmacy?.licenseDocData) { res.status(404).json({ error: "No license document uploaded" }); return; }
+
+  const buffer = Buffer.from(pharmacy.licenseDocData, "base64");
+  res.setHeader("Content-Type", pharmacy.licenseDocMime ?? "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(pharmacy.licenseDocName ?? "license")}"`);
+  res.send(buffer);
+});
+
+router.post("/admin/pharmacies/:pharmacyId/verification", requireAdmin, async (req, res): Promise<void> => {
+  const pharmacyId = Number(req.params.pharmacyId);
+  if (!Number.isInteger(pharmacyId) || pharmacyId < 1) { res.status(400).json({ error: "Invalid pharmacy id" }); return; }
+
+  const parsed = VerificationDecisionBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const { decision, reason } = parsed.data;
+
+  const [pharmacy] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, pharmacyId));
+  if (!pharmacy) { res.status(404).json({ error: "Pharmacy not found" }); return; }
+  if (pharmacy.verificationStatus === "approved" && decision === "approve") {
+    res.status(400).json({ error: "Pharmacy is already approved" }); return;
+  }
+
+  const adminId = req.session.adminId!;
+  const [admin] = await db.select({ email: adminsTable.email }).from(adminsTable).where(eq(adminsTable.id, adminId));
+
+  if (decision === "approve") {
+    await db.update(pharmaciesTable).set({
+      verificationStatus: "approved", rejectionReason: null, verifiedAt: new Date(), verifiedByAdminId: adminId,
+    }).where(eq(pharmaciesTable.id, pharmacyId));
+    await db.insert(notificationsTable).values({
+      pharmacyId,
+      message: `تم اعتماد صيدليتكم "${pharmacy.name}" — يمكنكم الآن إرسال واستقبال طلبات التبادل`,
+    });
+  } else {
+    await db.update(pharmaciesTable).set({
+      verificationStatus: "rejected", rejectionReason: reason!, verifiedAt: new Date(), verifiedByAdminId: adminId,
+    }).where(eq(pharmaciesTable.id, pharmacyId));
+    await db.insert(notificationsTable).values({
+      pharmacyId,
+      message: `تم رفض اعتماد صيدليتكم "${pharmacy.name}". السبب: ${reason}`,
+    });
+  }
+
+  await db.insert(auditLogsTable).values({
+    actorType: "admin",
+    actorId: adminId,
+    actorLabel: admin?.email ?? null,
+    action: decision === "approve" ? "pharmacy.verification.approved" : "pharmacy.verification.rejected",
+    targetType: "pharmacy",
+    targetId: pharmacyId,
+    details: decision === "approve" ? null : reason!,
+  });
+
+  res.json({ message: decision === "approve" ? "Pharmacy approved" : "Pharmacy rejected" });
 });
 
 router.get("/admin/medicines", requireAdmin, async (_req, res): Promise<void> => {

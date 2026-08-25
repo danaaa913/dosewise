@@ -1,6 +1,12 @@
-﻿import { pgTable, text, serial, boolean, timestamp } from "drizzle-orm/pg-core";
+﻿import { pgTable, text, serial, boolean, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export const VERIFICATION_STATUSES = ["pending", "approved", "rejected"] as const;
+
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+
+export const verificationStatusEnum = pgEnum("verification_status", VERIFICATION_STATUSES);
 
 export const pharmaciesTable = pgTable("pharmacies", {
   id: serial("id").primaryKey(),
@@ -12,6 +18,10 @@ export const pharmaciesTable = pgTable("pharmacies", {
   address: text("address").notNull(),
   passwordHash: text("password_hash").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  verificationStatus: verificationStatusEnum("verification_status").notNull().default("pending"),
+  rejectionReason: text("rejection_reason"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verifiedByAdminId: integer("verified_by_admin_id"),
   isSubscribed: boolean("is_subscribed").notNull().default(false),
   subscriptionPlan: text("subscription_plan"),
   subscriptionStartDate: timestamp("subscription_start_date", { withTimezone: true }),

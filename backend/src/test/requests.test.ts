@@ -25,11 +25,23 @@ async function registerPharmacy(): Promise<{ email: string; agent: request.Agent
     password: "password123456",
   });
   expect(res.status).toBe(201);
+  await approvePharmacy(res.body.pharmacy.id);
 
   const agent = request.agent(app);
   const login = await agent.post("/api/auth/login").send({ email, password: "password123456" });
   expect(login.status).toBe(200);
   return { email, agent };
+}
+
+
+async function approvePharmacy(pharmacyId: number) {
+  const admin = request.agent(app);
+  await admin.post("/api/admin/login").send({
+    email: process.env.ADMIN_EMAIL!,
+    password: process.env.ADMIN_PASSWORD!,
+  }).expect(200);
+  await admin.post(`/api/admin/pharmacies/${pharmacyId}/verification`)
+    .send({ decision: "approve" }).expect(200);
 }
 
 async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: number; expiryDate: string }> = {}) {

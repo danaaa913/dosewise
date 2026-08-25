@@ -1,10 +1,39 @@
-﻿import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/layout";
 import { api, formatPrice } from "@/lib/api";
 import { useState } from "react";
 
+const VERIFICATION_BADGES: Record<string, { label: string; cls: string }> = {
+  pending: { label: "قيد المراجعة", cls: "bg-amber-100 text-amber-700" },
+  approved: { label: "معتمدة", cls: "bg-emerald-100 text-emerald-700" },
+  rejected: { label: "مرفوضة", cls: "bg-red-100 text-red-600" },
+};
+
 export default function AdminDashboardPage() {
   const [tab, setTab] = useState<"overview" | "pharmacies" | "medicines">("overview");
+  const qc = useQueryClient();
+  const [actionError, setActionError] = useState("");
+
+  const decideMut = useMutation({
+    mutationFn: ({ id, decision, reason }: { id: number; decision: "approve" | "reject"; reason?: string }) =>
+      api.admin.decideVerification(id, decision, reason),
+    onSuccess: () => {
+      setActionError("");
+      qc.invalidateQueries({ queryKey: ["admin-pharmacies"] });
+    },
+    onError: (e: Error) => setActionError(e.message),
+  });
+
+  const decide = (id: number, decision: "approve" | "reject") => {
+    if (decision === "approve" && !confirm("اعتماد هذه الصيدلية وتمكينها من التبادل؟")) return;
+    let reason: string | undefined;
+    if (decision === "reject") {
+      const entered = prompt("سبب الرفض (سيصل للصيدلية ويُسجل بالتدقيق):");
+      if (!entered || entered.trim().length < 5) return;
+      reason = entered;
+    }
+    decideMut.mutate({ id, decision, reason: reason ?? undefined });
+  };
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: api.admin.stats });
   const { data: pharmacies } = useQuery({ queryKey: ["admin-pharmacies"], queryFn: api.admin.pharmacies });
@@ -61,38 +90,75 @@ export default function AdminDashboardPage() {
 
       {/* Pharmacies */}
       {tab === "pharmacies" && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="space-y-3">
+          {actionError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{actionError}</div>
+          )}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["Ø§Ù„Ø§Ø³Ù…", "Ø§Ù„Ù…Ø³Ø¤ÙˆÙ„", "Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ", "Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©", "Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ", "Ø§Ù„ØªØ³Ø¬ÙŠÙ„"].map((h) => (
+                {["الاسم", "المسؤول", "البريد الإلكتروني", "المدينة", "الاعتماد", "السجل التجاري", ""].map((h) => (
                   <th key={h} className="text-right px-4 py-3 text-xs font-semibold text-slate-600">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(pharmacies ?? []).map((p) => (
+              {(pharmacies ?? []).map((p) => {
+                const badge = VERIFICATION_BADGES[p.verificationStatus] ?? VERIFICATION_BADGES.pending;
+                return (
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
                   <td className="px-4 py-3 text-slate-600">{p.managerName}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs" dir="ltr">{p.email}</td>
                   <td className="px-4 py-3 text-slate-600">{p.city}</td>
                   <td className="px-4 py-3">
-                    {p.isSubscribed ? (
-                      <span className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium">
-                        {p.subscriptionPlan === "monthly" ? "Ø´Ù‡Ø±ÙŠ" : p.subscriptionPlan === "yearly" ? "Ø³Ù†ÙˆÙŠ" : "Ù…Ø¬Ø§Ù†ÙŠ"}
-                      </span>
-                    ) : (
-                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-500 rounded-full">ØºÙŠØ± Ù…Ø´ØªØ±Ùƒ</span>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+                    {p.verificationStatus === "rejected" && p.rejectionReason && (
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[160px]">{p.rejectionReason}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">
-                    {new Date(p.createdAt).toLocaleDateString("ar-JO")}
+                  <td className="px-4 py-3 text-xs">
+                    {p.licenseNumber && <p className="text-slate-600" dir="ltr">{p.licenseNumber}</p>}
+                    {p.hasLicenseDoc ? (
+                      <a
+                        href={api.admin.licenseDocumentUrl(p.id)}
+                        className="text-emerald-600 hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        📎 {p.licenseDocName ?? "المستند"}
+                      </a>
+                    ) : (
+                      <span className="text-slate-400">لا يوجد ملف</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {p.verificationStatus !== "approved" && (
+                      <button
+                        onClick={() => decide(p.id, "approve")}
+                        disabled={decideMut.isPending}
+                        className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 min-h-[36px]"
+                      >
+                        اعتماد
+                      </button>
+                    )}
+                    {p.verificationStatus === "pending" && (
+                      <button
+                        onClick={() => decide(p.id, "reject")}
+                        disabled={decideMut.isPending}
+                        className="ms-1 border border-red-300 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-60 min-h-[36px]"
+                      >
+                        رفض
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
