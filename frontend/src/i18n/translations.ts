@@ -160,6 +160,8 @@ export const translations = {
       adminLogin: "دخول المشرف",
       error: "فشل تسجيل الدخول",
       backToPlatform: "العودة إلى المنصة",
+      showPassword: "إظهار كلمة المرور",
+      hidePassword: "إخفاء كلمة المرور",
     },
     adminLogin: {
       title: "لوحة الإدارة",
@@ -433,6 +435,8 @@ export const translations = {
       adminLogin: "Admin Sign In",
       error: "Invalid email or password",
       backToPlatform: "Back to platform",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
     },
     adminLogin: {
       title: "Admin Panel",

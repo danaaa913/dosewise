@@ -44,11 +44,11 @@ export default function LoginPage() {
     <div className="relative flex min-h-screen flex-col bg-background">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-28 start-[-8%] size-72 rounded-full bg-brand-teal-soft/60 blur-3xl"
+        className="pointer-events-none absolute -top-24 start-4 size-72 rounded-full bg-brand-teal-soft/60 blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-[-7rem] end-[-9%] size-80 rounded-full bg-brand-teal-soft/50 blur-3xl"
+        className="pointer-events-none absolute bottom-10 end-4 size-80 rounded-full bg-brand-teal-soft/50 blur-3xl"
       />
 
       <header className="relative z-10 border-b border-border/60 bg-background/80">
@@ -131,7 +131,7 @@ export default function LoginPage() {
                   onClick={() => setShowPw(!showPw)}
                   tabIndex={-1}
                   className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                  aria-label={showPw ? "Hide password" : "Show password"}
+                  aria-label={showPw ? t.login.hidePassword : t.login.showPassword}
                 >
                   {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
