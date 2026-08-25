@@ -27,7 +27,7 @@ export default function LoginPage() {
     try {
       await api.auth.login({ email: email.trim(), password });
       await refresh();
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err.message || t.login.error);
     } finally {

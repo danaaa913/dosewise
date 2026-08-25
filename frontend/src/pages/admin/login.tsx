@@ -115,7 +115,7 @@ export default function AdminLoginPage() {
         </div>
 
         <Link
-          href="/"
+          href="/login"
           className="flex items-center justify-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="size-4 rtl:rotate-180" />

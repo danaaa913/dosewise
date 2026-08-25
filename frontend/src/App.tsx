@@ -44,7 +44,7 @@ function LoadingScreen() {
 function PharmacyRoute({ component: Component }: { component: React.ComponentType }) {
   const { loggedIn, isAdmin, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (!loggedIn || isAdmin) return <Redirect to="/" />;
+  if (!loggedIn || isAdmin) return <Redirect to="/login" />;
   return <Component />;
 }
 
@@ -67,6 +67,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <GuestRoute component={LoginPage} />} />
+      <Route path="/login" component={() => <GuestRoute component={LoginPage} />} />
       <Route path="/register" component={() => <GuestRoute component={RegisterPage} />} />
       <Route path="/dashboard" component={() => <PharmacyRoute component={DashboardPage} />} />
       <Route path="/my-medicines" component={() => <PharmacyRoute component={MyMedicinesPage} />} />
