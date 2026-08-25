@@ -57,7 +57,7 @@ router.post("/requests/send", requireVerifiedPharmacy, async (req, res): Promise
   const [requester] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
     pharmacyId: medicine.pharmacyId,
-    message: `Ø·Ù„Ø¨ Ø¬Ø¯ÙŠØ¯ Ù…Ù† ${requester?.name ?? "ØµÙŠØ¯Ù„ÙŠØ©"} Ù„Ù„Ø¯ÙˆØ§Ø¡: ${medicine.name} (Ø§Ù„ÙƒÙ…ÙŠØ©: ${requestedQuantity})`,
+    message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${medicine.name} (الكمية: ${requestedQuantity})`,
   });
 
   res.status(201).json({

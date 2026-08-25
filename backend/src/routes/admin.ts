@@ -20,10 +20,10 @@ router.post("/admin/login", loginLimiter, async (req, res): Promise<void> => {
 
   const { email, password } = parsed.data;
   const [admin] = await db.select().from(adminsTable).where(eq(adminsTable.email, email));
-  if (!admin) { res.status(401).json({ error: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" }); return; }
+  if (!admin) { res.status(401).json({ error: "بيانات الدخول غير صحيحة" }); return; }
 
   const valid = await bcrypt.compare(password, admin.passwordHash);
-  if (!valid) { res.status(401).json({ error: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" }); return; }
+  if (!valid) { res.status(401).json({ error: "بيانات الدخول غير صحيحة" }); return; }
 
   req.session.adminId = admin.id;
   req.session.isAdmin = true;

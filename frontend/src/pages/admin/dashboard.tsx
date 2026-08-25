@@ -40,11 +40,11 @@ export default function AdminDashboardPage() {
   const { data: medicines } = useQuery({ queryKey: ["admin-medicines"], queryFn: api.admin.medicines });
 
   const statCards = [
-    { label: "Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„ØµÙŠØ¯Ù„ÙŠØ§Øª", value: stats?.totalPharmacies ?? 0, color: "emerald" },
-    { label: "Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø£Ø¯ÙˆÙŠØ©", value: stats?.totalMedicines ?? 0, color: "blue" },
-    { label: "Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø·Ù„Ø¨Ø§Øª", value: stats?.totalRequests ?? 0, color: "violet" },
-    { label: "Ø§Ø´ØªØ±Ø§ÙƒØ§Øª Ù†Ø´Ø·Ø©", value: stats?.activeSubscriptions ?? 0, color: "amber" },
-    { label: "Ø·Ù„Ø¨Ø§Øª Ù…Ø¹Ù„Ù‚Ø©", value: stats?.pendingRequests ?? 0, color: "red" },
+    { label: "إجمالي الصيدليات", value: stats?.totalPharmacies ?? 0, color: "emerald" },
+    { label: "إجمالي الأدوية", value: stats?.totalMedicines ?? 0, color: "blue" },
+    { label: "إجمالي الطلبات", value: stats?.totalRequests ?? 0, color: "violet" },
+    { label: "اشتراكات نشطة", value: stats?.activeSubscriptions ?? 0, color: "amber" },
+    { label: "طلبات معلقة", value: stats?.pendingRequests ?? 0, color: "red" },
   ];
 
   const colorMap: Record<string, string> = {
@@ -56,13 +56,13 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <AdminLayout title="Ù„ÙˆØ­Ø© ØªØ­ÙƒÙ… Ø§Ù„Ø¥Ø¯Ø§Ø±Ø©">
+    <AdminLayout title="لوحة تحكم الإدارة">
       {/* Tab bar */}
       <div className="flex gap-1 mb-8 bg-slate-100 p-1 rounded-xl w-fit">
         {[
-          { id: "overview", label: "Ù†Ø¸Ø±Ø© Ø¹Ø§Ù…Ø©" },
-          { id: "pharmacies", label: "Ø§Ù„ØµÙŠØ¯Ù„ÙŠØ§Øª" },
-          { id: "medicines", label: "Ø§Ù„Ø£Ø¯ÙˆÙŠØ©" },
+          { id: "overview", label: "نظرة عامة" },
+          { id: "pharmacies", label: "الصيدليات" },
+          { id: "medicines", label: "الأدوية" },
         ].map((t) => (
           <button
             key={t.id}
@@ -168,7 +168,7 @@ export default function AdminDashboardPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["Ø§Ø³Ù… Ø§Ù„Ø¯ÙˆØ§Ø¡", "Ø§Ù„ØµÙŠØ¯Ù„ÙŠØ©", "Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©", "Ø§Ù„ÙƒÙ…ÙŠØ©", "Ø§Ù„Ø³Ø¹Ø± (JOD)", "Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ©", "Ø§Ù„Ø­Ø§Ù„Ø©"].map((h) => (
+                {["اسم الدواء", "الصيدلية", "المدينة", "الكمية", "السعر (JOD)", "الصلاحية", "الحالة"].map((h) => (
                   <th key={h} className="text-right px-4 py-3 text-xs font-semibold text-slate-600">{h}</th>
                 ))}
               </tr>
@@ -186,7 +186,7 @@ export default function AdminDashboardPage() {
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                       m.isAvailable ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
                     }`}>
-                      {m.isAvailable ? "Ù…ØªØ§Ø­" : "ØºÙŠØ± Ù…ØªØ§Ø­"}
+                      {m.isAvailable ? "متاح" : "غير متاح"}
                     </span>
                   </td>
                 </tr>

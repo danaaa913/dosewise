@@ -15,16 +15,17 @@ export async function ensureDefaultAdmin(): Promise<void> {
   try {
     const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-    const inserted = await db
+    const rows = await db
       .insert(adminsTable)
       .values({ email: adminEmail, passwordHash })
-      .onConflictDoNothing({ target: adminsTable.email })
+      .onConflictDoUpdate({
+        target: adminsTable.email,
+        set: { passwordHash },
+      })
       .returning({ id: adminsTable.id });
 
-    if (inserted.length > 0) {
-      logger.info({ email: adminEmail }, "Seeded admin from environment");
-    } else {
-      logger.info({ email: adminEmail }, "Admin already present");
+    if (rows.length > 0) {
+      logger.info({ email: adminEmail }, "Admin ensured (credentials synced from environment)");
     }
   } catch (err) {
     logger.error({ err }, "Failed to ensure default admin");

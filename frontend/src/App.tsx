@@ -34,7 +34,7 @@ function LoadingScreen() {
         <div className="inline-block animate-pulse mb-4">
           <Logo size={48} />
         </div>
-        <p className="text-sm text-slate-500">Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„...</p>
+        <p className="text-sm text-slate-500">جاري التحميل...</p>
       </div>
     </div>
   );

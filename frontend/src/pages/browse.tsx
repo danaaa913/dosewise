@@ -26,7 +26,7 @@ export default function BrowsePage() {
         requestedQuantity: Number(qty),
       }),
     onSuccess: () => {
-      setRequestSuccess("ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­");
+      setRequestSuccess("تم إرسال الطلب بنجاح");
       setRequesting(null);
       qc.invalidateQueries({ queryKey: ["requests-sent"] });
       setTimeout(() => setRequestSuccess(""), 3000);
@@ -35,7 +35,7 @@ export default function BrowsePage() {
   });
 
   return (
-    <Layout title="ØªØµÙØ­ Ø§Ù„Ø£Ø¯ÙˆÙŠØ© Ø§Ù„Ù…ØªØ§Ø­Ø©">
+    <Layout title="تصفح الأدوية المتاحة">
       {/* Search */}
       <div className="mb-6">
         <div className="relative max-w-md">
@@ -46,7 +46,7 @@ export default function BrowsePage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ø§Ø¨Ø­Ø« Ø¹Ù† Ø¯ÙˆØ§Ø¡..."
+            placeholder="ابحث عن دواء..."
             className="w-full pr-9 pl-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -63,20 +63,20 @@ export default function BrowsePage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨</h3>
+              <h3 className="font-semibold text-slate-800">إرسال طلب</h3>
               <button onClick={() => { setRequesting(null); setRequestError(""); }} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
             </div>
             <div className="p-6">
               <p className="text-sm text-slate-700 mb-1 font-medium">{requesting.name}</p>
-              <p className="text-xs text-slate-500 mb-4">Ù…Ù†: {requesting.pharmacyName} â€” {requesting.pharmacyCity}</p>
-              <p className="text-xs text-slate-500 mb-1">Ù…ØªØ§Ø­: {requesting.quantity} ÙˆØ­Ø¯Ø© â€” Ø§Ù„Ø³Ø¹Ø±: {formatPrice(requesting.price)} JOD</p>
+              <p className="text-xs text-slate-500 mb-4">من: {requesting.pharmacyName} — {requesting.pharmacyCity}</p>
+              <p className="text-xs text-slate-500 mb-1">متاح: {requesting.quantity} وحدة — السعر: {formatPrice(requesting.price)} JOD</p>
 
               {requestError && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg mb-3">{requestError}</p>
               )}
 
               <div className="mt-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Ø§Ù„ÙƒÙ…ÙŠØ© Ø§Ù„Ù…Ø·Ù„ÙˆØ¨Ø©</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">الكمية المطلوبة</label>
                 <input
                   type="number"
                   min="1"
@@ -100,7 +100,7 @@ export default function BrowsePage() {
                   onClick={() => { setRequesting(null); setRequestError(""); }}
                   className="px-4 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors"
                 >
-                  Ø¥Ù„ØºØ§Ø¡
+                  إلغاء
                 </button>
               </div>
             </div>
@@ -110,11 +110,11 @@ export default function BrowsePage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„...</div>
+        <div className="text-center py-16 text-slate-400 text-sm">جاري التحميل...</div>
       ) : !medicines?.length ? (
         <div className="text-center py-16">
           <p className="text-slate-500 text-sm">
-            {search ? `Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¬ Ù„Ù€ "${search}"` : "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø£Ø¯ÙˆÙŠØ© Ù…ØªØ§Ø­Ø© Ø­Ø§Ù„ÙŠØ§Ù‹"}
+            {search ? `لا توجد نتائج لـ "${search}"` : "لا توجد أدوية متاحة حالياً"}
           </p>
         </div>
       ) : (
@@ -130,16 +130,16 @@ export default function BrowsePage() {
 
               <div className="space-y-1.5 mb-4">
                 <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">Ø§Ù„ØµÙŠØ¯Ù„ÙŠØ©:</span> {m.pharmacyName}
+                  <span className="font-medium text-slate-600">الصيدلية:</span> {m.pharmacyName}
                 </p>
                 <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©:</span> {m.pharmacyCity}
+                  <span className="font-medium text-slate-600">المدينة:</span> {m.pharmacyCity}
                 </p>
                 <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">Ø§Ù„ÙƒÙ…ÙŠØ© Ø§Ù„Ù…ØªØ§Ø­Ø©:</span> {m.quantity} ÙˆØ­Ø¯Ø©
+                  <span className="font-medium text-slate-600">الكمية المتاحة:</span> {m.quantity} وحدة
                 </p>
                 <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ© Ø­ØªÙ‰:</span> {m.expiryDate}
+                  <span className="font-medium text-slate-600">الصلاحية حتى:</span> {m.expiryDate}
                 </p>
               </div>
 
@@ -155,7 +155,7 @@ export default function BrowsePage() {
                 }}
                 className="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
               >
-                Ø·Ù„Ø¨ Ù‡Ø°Ø§ Ø§Ù„Ø¯ÙˆØ§Ø¡
+                طلب هذا الدواء
               </button>
             </div>
           ))}
