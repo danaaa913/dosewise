@@ -1,15 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "wouter";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Logo } from "@/components/Logo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { cn } from "@/lib/utils";
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export default function LoginPage() {
   const { t } = useLanguage();
@@ -36,45 +41,65 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full">
-      {/* ── Brand half (desktop) ── */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-primary flex-col items-center justify-center p-12 text-primary-foreground overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/30 via-primary to-primary opacity-80" />
-        <div className="relative z-10 flex flex-col items-center text-center max-w-md">
-          <Logo size={80} className="mb-8 drop-shadow-lg" />
-          <h1 className="text-4xl font-bold mb-4 leading-tight">{t.login.brandDescription}</h1>
-          <p className="text-lg text-primary-foreground/80">{t.login.footer}</p>
-          <div className="mt-8 text-sm text-primary-foreground/60">{t.login.country}</div>
-        </div>
-      </div>
+    <div className="relative flex min-h-screen flex-col bg-background">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-28 start-[-8%] size-72 rounded-full bg-brand-teal-soft/60 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-[-7rem] end-[-9%] size-80 rounded-full bg-brand-teal-soft/50 blur-3xl"
+      />
 
-      {/* ── Form half ── */}
-      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center px-6 py-12 bg-background">
-        {/* Top bar */}
-        <div className="absolute top-4 end-4">
-          <LanguageSwitcher />
-        </div>
+      <header className="relative z-10 border-b border-border/60 bg-background/80">
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+          <Link
+            href="/"
+            aria-label="DoseWise"
+            className={cn("flex items-center gap-2 rounded-md", FOCUS_RING)}
+          >
+            <Logo size={26} />
+            <span className="hidden min-[380px]:inline text-sm font-bold text-brand-navy">
+              DoseWise
+            </span>
+          </Link>
 
-        <div className="w-full max-w-sm space-y-8">
-          {/* Mobile logo */}
-          <div className="flex flex-col items-center text-center lg:hidden">
-            <Logo size={56} className="mb-4" />
+          <div className="flex items-center gap-1">
+            <Link
+              href="/"
+              aria-label={t.login.backToPlatform}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline",
+                FOCUS_RING
+              )}
+            >
+              <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
+              <span className="hidden min-[420px]:inline">{t.login.backToPlatform}</span>
+            </Link>
+            <LanguageSwitcher />
           </div>
+        </div>
+      </header>
 
-          <div className="text-center space-y-1">
-            <h2 className="text-2xl font-bold tracking-tight">{t.login.title}</h2>
-            <p className="text-sm text-muted-foreground">{t.login.subtitle}</p>
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-10 sm:py-14">
+        <div className="w-full max-w-[440px] rounded-2xl border border-border bg-background p-6 shadow-sm sm:p-8">
+          <div className="mb-7 flex flex-col items-center text-center">
+            <Logo size={52} />
+            <h1 className="mt-4 text-xl font-bold tracking-tight text-brand-navy sm:text-2xl">
+              {t.login.title}
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">{t.login.subtitle}</p>
           </div>
 
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="mb-5">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
-              <label htmlFor="login-email" className="text-sm font-medium">{t.login.email}</label>
+              <Label htmlFor="login-email">{t.login.email}</Label>
               <Input
                 id="login-email"
                 name="email"
@@ -89,7 +114,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="login-password" className="text-sm font-medium">{t.login.password}</label>
+              <Label htmlFor="login-password">{t.login.password}</Label>
               <div className="relative">
                 <Input
                   id="login-password"
@@ -113,26 +138,37 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full" size="lg">
+            <Button
+              type="submit"
+              disabled={loading}
+              size="lg"
+              className="min-h-[44px] w-full bg-brand-teal-deep text-white hover:bg-brand-teal-deep/90"
+            >
               {loading ? <Spinner className="size-4" /> : t.login.submit}
             </Button>
           </form>
 
-          <div className="space-y-3 text-center text-sm">
-            <p className="text-muted-foreground">
-              {t.login.noAccount}{" "}
-              <Link href="/register" className="font-medium text-primary hover:underline">
-                {t.login.registerLink}
-              </Link>
-            </p>
-            <p>
-              <Link href="/admin" className="text-muted-foreground hover:text-foreground hover:underline">
-                {t.login.adminLogin}
-              </Link>
-            </p>
-          </div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            {t.login.noAccount}{" "}
+            <Link
+              href="/register"
+              className={cn("font-medium text-primary underline-offset-4 hover:underline", FOCUS_RING)}
+            >
+              {t.login.registerLink}
+            </Link>
+          </p>
         </div>
-      </div>
+
+        <Link
+          href="/admin"
+          className={cn(
+            "mt-6 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline",
+            FOCUS_RING
+          )}
+        >
+          {t.login.adminLogin}
+        </Link>
+      </main>
     </div>
   );
 }

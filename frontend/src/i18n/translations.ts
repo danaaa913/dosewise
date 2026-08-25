@@ -159,9 +159,7 @@ export const translations = {
       registerLink: "سجل صيدليتك",
       adminLogin: "دخول المشرف",
       error: "فشل تسجيل الدخول",
-      country: "الأردن (Jordan) · العملة JOD (د.أ)",
-      footer: "منصة موثوقة لتبادل الأدوية بين صيدليات الأردن",
-      brandDescription: "منصة B2B لتبادل مخزون الأدوية بين الصيدليات الأردنية — وفر الوقت والتكلفة وتجنب نفاد المخزون",
+      backToPlatform: "العودة إلى المنصة",
     },
     adminLogin: {
       title: "لوحة الإدارة",
@@ -434,9 +432,7 @@ export const translations = {
       registerLink: "Register your pharmacy",
       adminLogin: "Admin Sign In",
       error: "Invalid email or password",
-      country: "Jordan · Currency JOD",
-      footer: "Trusted medicine exchange platform for Jordanian pharmacies",
-      brandDescription: "A B2B platform for exchanging medicine inventory between Jordanian pharmacies — save time, reduce costs, and avoid stockouts",
+      backToPlatform: "Back to platform",
     },
     adminLogin: {
       title: "Admin Panel",
