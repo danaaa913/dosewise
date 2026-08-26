@@ -1,208 +1,449 @@
-﻿import { useQuery } from "@tanstack/react-query";
+﻿import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Link } from "wouter";
+import {
+  Package,
+  ArrowLeftRight,
+  Bell,
+  Search,
+  Plus,
+  Sparkles,
+  Clock3,
+  CircleAlert,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export default function DashboardPage() {
   const { pharmacy } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
+  const numberFormatter = new Intl.NumberFormat(locale);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  const { data: medicines, isError: errMed, refetch: refMed } = useQuery({
+  const {
+    data: medicines,
+    isPending: pendingMed,
+    isError: errMed,
+    refetch: refMed,
+  } = useQuery({
     queryKey: ["my-medicines"],
     queryFn: api.medicines.my,
+    retry: false,
   });
 
-  const { data: sentRequests, isError: errSent } = useQuery({
+  const {
+    data: sentRequests,
+    isPending: pendingSent,
+    isError: errSent,
+    refetch: refSent,
+  } = useQuery({
     queryKey: ["requests-sent"],
     queryFn: api.requests.sent,
+    retry: false,
   });
 
-  const { data: receivedRequests, isError: errRecv } = useQuery({
+  const {
+    data: receivedRequests,
+    isPending: pendingRecv,
+    isError: errRecv,
+    refetch: refRecv,
+  } = useQuery({
     queryKey: ["requests-received"],
     queryFn: api.requests.received,
+    retry: false,
   });
 
-  const { data: subStatus } = useQuery({
+  const {
+    data: subStatus,
+    isPending: pendingSub,
+    isError: errSub,
+    refetch: refSub,
+  } = useQuery({
     queryKey: ["sub-status"],
     queryFn: api.subscriptions.status,
+    retry: false,
   });
 
-  const { data: notifData } = useQuery({
+  const {
+    data: notifData,
+    isPending: pendingNotif,
+    isError: errNotif,
+    refetch: refNotif,
+  } = useQuery({
     queryKey: ["notifications-count"],
     queryFn: () => api.notifications.my(),
+    retry: false,
   });
 
-  const stats = [
-    {
-      label: "أدويتي",
-      value: medicines?.length ?? 0,
-      sub: `${medicines?.filter((m) => m.isAvailable).length ?? 0} متاحة`,
-      href: "/my-medicines",
-      color: "emerald",
-    },
-    {
-      label: "طلبات أرسلتها",
-      value: sentRequests?.length ?? 0,
-      sub: `${sentRequests?.filter((r) => r.status === "pending").length ?? 0} معلقة`,
-      href: "/requests",
-      color: "blue",
-    },
-    {
-      label: "طلبات واردة",
-      value: receivedRequests?.length ?? 0,
-      sub: `${receivedRequests?.filter((r) => r.status === "pending").length ?? 0} تحتاج ردًا`,
-      href: "/requests",
-      color: "amber",
-    },
-    {
-      label: "إشعارات غير مقروءة",
-      value: notifData?.unreadCount ?? 0,
-      sub: "اضغط للعرض",
-      href: "/notifications",
-      color: "violet",
-    },
-  ];
+  const hasAnyError = errMed || errSent || errRecv || errSub || errNotif;
 
-  const colorMap: Record<string, string> = {
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
-    amber: "bg-amber-50 border-amber-200 text-amber-700",
-    violet: "bg-violet-50 border-violet-200 text-violet-700",
-  };
-  const valueColorMap: Record<string, string> = {
-    emerald: "text-emerald-700",
-    blue: "text-blue-700",
-    amber: "text-amber-700",
-    violet: "text-violet-700",
+  const handleRetryAll = async () => {
+    setIsRetrying(true);
+    try {
+      await Promise.all([refMed(), refSent(), refRecv(), refSub(), refNotif()]);
+    } finally {
+      setIsRetrying(false);
+    }
   };
 
   const pendingReceived = receivedRequests?.filter((r) => r.status === "pending") ?? [];
-  const isLoading = !medicines && !sentRequests && !receivedRequests;
-  const hasError = errMed || errSent || errRecv;
 
   return (
-    <Layout title="لوحة التحكم">
-      {pharmacy?.verificationStatus === "pending" && (
-        <div className="mb-5 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
-          <span className="font-bold">⏳ حسابك قيد المراجعة:</span> سيراجع فريق DoseWise سجلكم التجاري قريباً. يمكنك إدارة مخزونك، لكن إرسال الطلبات سيُتاح بعد الاعتماد.
-        </div>
-      )}
-      {pharmacy?.verificationStatus === "rejected" && (
-        <div className="mb-5 p-4 bg-red-50 border border-red-300 rounded-lg text-sm text-red-700">
-          <span className="font-bold">✖ تم رفض اعتماد صيدليتكم.</span> السبب: {pharmacy.rejectionReason ?? "غير محدد"} — يمكنك تحديث بياناتكم والتواصل مع الدعم لإعادة المراجعة.
-        </div>
-      )}
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold text-slate-800">مرحباً، {pharmacy?.name}</h3>
-        <p className="text-sm text-slate-500 mt-1">إليك ملخص نشاط صيدليتك</p>
-      </div>
+    <Layout title={t.nav.dashboard}>
+      <div className="space-y-6">
+        {/* Welcome — not h1 (Layout already renders h2), use styled div */}
+        <section aria-label={t.dashboard.welcome.replace("{name}", pharmacy?.name ?? "")}>
+          <p className="text-xl font-semibold tracking-tight text-brand-navy">
+            {t.dashboard.welcome.replace("{name}", pharmacy?.name ?? "")}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t.dashboard.subtitle}</p>
+        </section>
 
-      {subStatus && !subStatus.isSubscribed && (
-        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-amber-800">لا يوجد اشتراك نشط</p>
-            <p className="text-xs text-amber-600 mt-0.5">فعّل اشتراكك للاستفادة من جميع الميزات</p>
+        {/* Verification status — single compact banner, no emoji */}
+        {pharmacy?.verificationStatus === "pending" && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+            <Clock3 className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
+            <p className="text-amber-800">{t.dashboard.reviewPending}</p>
           </div>
-          <Link
-            href="/subscriptions"
-            className="text-xs font-medium bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-          >
-            عرض الخطط
-          </Link>
-        </div>
-      )}
-
-      {subStatus?.isSubscribed && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-emerald-800">
-              اشتراك {subStatus.plan === "monthly" ? "الشهري" : subStatus.plan === "yearly" ? "السنوي" : "المجاني"} نشط
-            </p>
-            <p className="text-xs text-emerald-600 mt-0.5">{subStatus.daysRemaining} يوم متبقي</p>
-          </div>
-          <span className="text-xs font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-lg">نشط</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="p-5 rounded-xl border border-slate-200 bg-white space-y-2">
-              <Skeleton className="h-8 w-12" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-          ))
-        ) : hasError ? (
-          <div className="col-span-full">
-            <Alert variant="destructive">
-              <p>{t.errors.query}</p>
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => refMed()}>{t.errors.retry}</Button>
-            </Alert>
-          </div>
-        ) : (
-          stats.map((s) => (
-            <Link
-              key={s.label}
-              href={s.href}
-              className={`block p-5 rounded-xl border ${colorMap[s.color]} hover:shadow-sm transition-shadow`}
-            >
-              <p className={`text-3xl font-bold ${valueColorMap[s.color]}`}>{s.value}</p>
-              <p className="text-sm font-medium text-slate-700 mt-1">{s.label}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{s.sub}</p>
-            </Link>
-          ))
         )}
-      </div>
+        {pharmacy?.verificationStatus === "rejected" && (
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+            <p className="text-destructive">
+              {t.dashboard.reviewRejected.replace("{reason}", pharmacy.rejectionReason ?? t.dashboard.reviewRejectedFallback)}
+            </p>
+          </div>
+        )}
 
-      {pendingReceived.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-slate-800">طلبات تحتاج ردًا</h4>
-            <Link href="/requests" className="text-xs text-emerald-600 hover:underline">
-              عرض الكل
+        {/* Subscription — compact card, not banner */}
+        {subStatus && !subStatus.isSubscribed && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-brand-teal-soft/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brand-navy">{t.dashboard.subInactiveTitle}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t.dashboard.subInactiveDesc}</p>
+            </div>
+            <Link
+              href="/subscriptions"
+              className={cn(
+                "inline-flex min-h-[36px] items-center justify-center rounded-lg bg-brand-teal-deep px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-navy",
+                FOCUS_RING
+              )}
+            >
+              {t.dashboard.subViewPlans}
             </Link>
           </div>
-          <div className="space-y-3">
-            {pendingReceived.slice(0, 5).map((req) => (
-              <div
-                key={req.id}
-                className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{req.medicineName}</p>
-                  <p className="text-xs text-slate-500">
-                    من: {req.requesterName} — الكمية: {req.requestedQuantity}
-                  </p>
-                </div>
-                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
-                  معلق
-                </span>
-              </div>
-            ))}
+        )}
+        {subStatus?.isSubscribed && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-background px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brand-navy">
+                {t.dashboard.subActiveLabel
+                  .replace(
+                    "{plan}",
+                    subStatus.plan === "monthly"
+                      ? t.dashboard.plan.monthly
+                      : subStatus.plan === "yearly"
+                        ? t.dashboard.plan.yearly
+                        : t.dashboard.plan.free
+                  )}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {subStatus.daysRemaining !== null
+                  ? t.dashboard.subDaysLeft.replace("{count}", numberFormatter.format(subStatus.daysRemaining))
+                  : ""}
+              </p>
+            </div>
+            <span className="inline-flex min-h-[30px] items-center rounded-full bg-brand-teal-deep px-3 py-1 text-xs font-medium text-white">
+              {t.dashboard.subActiveBadge}
+            </span>
           </div>
-        </div>
-      )}
+        )}
+        {pendingSub && !subStatus && (
+          <div className="rounded-xl border border-border bg-background p-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="mt-2 h-3 w-40" />
+          </div>
+        )}
 
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { href: "/my-medicines", label: "إضافة دواء جديد" },
-          { href: "/browse", label: "تصفح الأدوية المتاحة" },
-          { href: "/analytics" },
-        ].map((a) => (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="block text-center p-4 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-700 transition-colors"
-          >
-            {a.label}
-          </Link>
-        ))}
+        {/* Global error — unified, shows only if any query failed, does not hide successful data */}
+        {hasAnyError && (
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>{t.dashboard.errors.load}</AlertTitle>
+            <AlertDescription className="mt-1 flex flex-col gap-3">
+              <span>{t.dashboard.errors.loadDesc}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetryAll}
+                disabled={isRetrying}
+                className="w-fit bg-background"
+              >
+                {isRetrying ? t.dashboard.errors.retrying : t.dashboard.errors.retry}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* KPI cards — brand/semantic only, responsive 1 / sm:2 / xl:4 */}
+        <section aria-label={t.dashboard.kpiSection}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {/* My medicines */}
+            <Link
+              href="/my-medicines"
+              className={cn(
+                "group flex flex-col gap-3 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <span className="inline-flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal-deep">
+                <Package className="size-5" aria-hidden="true" />
+              </span>
+              {pendingMed && !medicines ? (
+                <>
+                  <Skeleton className="h-8 w-14" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-20" />
+                </>
+              ) : errMed && !medicines ? (
+                <>
+                  <p className="text-2xl font-bold text-brand-navy">—</p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.myMedicines}</p>
+                  <p className="text-xs text-muted-foreground">—</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold tracking-tight text-brand-navy">
+                    {numberFormatter.format(medicines?.length ?? 0)}
+                  </p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.myMedicines}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t.dashboard.kpi.myMedicinesSub.replace(
+                      "{count}",
+                      numberFormatter.format(medicines?.filter((m) => m.isAvailable).length ?? 0)
+                    )}
+                  </p>
+                </>
+              )}
+            </Link>
+
+            {/* Incoming requests */}
+            <Link
+              href="/requests"
+              className={cn(
+                "group flex flex-col gap-3 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <span className="inline-flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal-deep">
+                <ArrowLeftRight className="size-5" aria-hidden="true" />
+              </span>
+              {pendingRecv && !receivedRequests ? (
+                <>
+                  <Skeleton className="h-8 w-14" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-20" />
+                </>
+              ) : errRecv && !receivedRequests ? (
+                <>
+                  <p className="text-2xl font-bold text-brand-navy">—</p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.incoming}</p>
+                  <p className="text-xs text-muted-foreground">—</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold tracking-tight text-brand-navy">
+                    {numberFormatter.format(receivedRequests?.length ?? 0)}
+                  </p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.incoming}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t.dashboard.kpi.incomingSub.replace(
+                      "{count}",
+                      numberFormatter.format(pendingReceived.length)
+                    )}
+                  </p>
+                </>
+              )}
+            </Link>
+
+            {/* Sent requests */}
+            <Link
+              href="/requests"
+              className={cn(
+                "group flex flex-col gap-3 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <span className="inline-flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal-deep">
+                <ArrowLeftRight className="size-5 scale-x-[-1]" aria-hidden="true" />
+              </span>
+              {pendingSent && !sentRequests ? (
+                <>
+                  <Skeleton className="h-8 w-14" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-20" />
+                </>
+              ) : errSent && !sentRequests ? (
+                <>
+                  <p className="text-2xl font-bold text-brand-navy">—</p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.sent}</p>
+                  <p className="text-xs text-muted-foreground">—</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold tracking-tight text-brand-navy">
+                    {numberFormatter.format(sentRequests?.length ?? 0)}
+                  </p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.sent}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t.dashboard.kpi.sentSub.replace(
+                      "{count}",
+                      numberFormatter.format(sentRequests?.filter((r) => r.status === "pending").length ?? 0)
+                    )}
+                  </p>
+                </>
+              )}
+            </Link>
+
+            {/* Notifications */}
+            <Link
+              href="/notifications"
+              className={cn(
+                "group flex flex-col gap-3 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <span className="inline-flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal-deep">
+                <Bell className="size-5" aria-hidden="true" />
+              </span>
+              {pendingNotif && !notifData ? (
+                <>
+                  <Skeleton className="h-8 w-14" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-20" />
+                </>
+              ) : errNotif && !notifData ? (
+                <>
+                  <p className="text-2xl font-bold text-brand-navy">—</p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.notifications}</p>
+                  <p className="text-xs text-muted-foreground">—</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold tracking-tight text-brand-navy">
+                    {numberFormatter.format(notifData?.unreadCount ?? 0)}
+                  </p>
+                  <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.notifications}</p>
+                  <p className="text-xs text-muted-foreground">{t.dashboard.kpi.notificationsSub}</p>
+                </>
+              )}
+            </Link>
+          </div>
+        </section>
+
+        {/* Pending requests — always visible */}
+        <section aria-label={t.dashboard.pendingTitle}>
+          <div className="rounded-xl border border-border bg-background p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-brand-navy">{t.dashboard.pendingTitle}</h3>
+              <Link
+                href="/requests"
+                className={cn(
+                  "text-xs font-medium text-brand-teal-deep underline-offset-4 hover:underline",
+                  FOCUS_RING,
+                  "rounded-md px-2 py-1"
+                )}
+              >
+                {t.dashboard.pendingViewAll}
+              </Link>
+            </div>
+
+            {pendingRecv && !receivedRequests ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : errRecv && !receivedRequests ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.pendingFailed}</p>
+            ) : pendingReceived.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-sm font-medium text-brand-navy">{t.dashboard.pendingEmptyTitle}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t.dashboard.pendingEmptyDesc}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingReceived.slice(0, 5).map((req) => (
+                  <div
+                    key={req.id}
+                    className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-brand-navy">{req.medicineName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.dashboard.pendingFrom
+                          .replace("{name}", req.requesterName)
+                          .replace("{qty}", numberFormatter.format(req.requestedQuantity))}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      {t.dashboard.pendingBadge}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Quick actions — 1 / sm:3, primary is add medicine */}
+        <section aria-label={t.dashboard.actionsSection}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Link
+              href="/my-medicines"
+              className={cn(
+                "flex flex-col gap-2 rounded-xl bg-brand-teal-deep p-5 text-white transition-colors hover:bg-brand-navy",
+                FOCUS_RING
+              )}
+            >
+              <Plus className="size-5" aria-hidden="true" />
+              <span className="text-sm font-semibold">{t.dashboard.actions.addTitle}</span>
+              <span className="text-xs text-white/80">{t.dashboard.actions.addDesc}</span>
+            </Link>
+
+            <Link
+              href="/browse"
+              className={cn(
+                "flex flex-col gap-2 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <Search className="size-5 text-brand-teal-deep" aria-hidden="true" />
+              <span className="text-sm font-semibold text-brand-navy">{t.dashboard.actions.browseTitle}</span>
+              <span className="text-xs text-muted-foreground">{t.dashboard.actions.browseDesc}</span>
+            </Link>
+
+            <Link
+              href="/ai"
+              className={cn(
+                "flex flex-col gap-2 rounded-xl border border-border bg-background p-5 transition-colors hover:border-brand-teal-soft hover:bg-brand-teal-soft/20",
+                FOCUS_RING
+              )}
+            >
+              <Sparkles className="size-5 text-brand-teal-deep" aria-hidden="true" />
+              <span className="text-sm font-semibold text-brand-navy">{t.dashboard.actions.aiTitle}</span>
+              <span className="text-xs text-muted-foreground">{t.dashboard.actions.aiDesc}</span>
+            </Link>
+          </div>
+        </section>
       </div>
     </Layout>
   );
