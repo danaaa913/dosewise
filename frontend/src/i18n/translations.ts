@@ -7,6 +7,11 @@ export const translations = {
     adminTagline: "لوحة الإدارة",
     loading: "جاري التحميل...",
     logout: "تسجيل الخروج",
+    shell: {
+      openMenu: "فتح القائمة",
+      closeMenu: "إغلاق القائمة",
+      skipToContent: "تجاوز إلى المحتوى",
+    },
     nav: {
       dashboard: "لوحة التحكم",
       myMedicines: "أدويتي",
@@ -282,6 +287,11 @@ export const translations = {
     adminTagline: "Admin Panel",
     loading: "Loading...",
     logout: "Log out",
+    shell: {
+      openMenu: "Open menu",
+      closeMenu: "Close menu",
+      skipToContent: "Skip to content",
+    },
     nav: {
       dashboard: "Dashboard",
       myMedicines: "My Medicines",
