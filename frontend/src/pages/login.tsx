@@ -129,7 +129,6 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  tabIndex={-1}
                   className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                   aria-label={showPw ? t.login.hidePassword : t.login.showPassword}
                 >
@@ -159,15 +158,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <Link
-          href="/admin"
-          className={cn(
-            "mt-6 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline",
-            FOCUS_RING
-          )}
-        >
-          {t.login.adminLogin}
-        </Link>
       </main>
     </div>
   );
