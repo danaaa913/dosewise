@@ -51,12 +51,42 @@ export const AdminLoginBody = zod.object({
   password: zod.string(),
 });
 
+function isValidCalendarDate(value: string): boolean {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() + 1 === mo && dt.getUTCDate() === d;
+}
+
+const emptyToUndefined = (v: unknown): unknown => {
+  if (v === null) return Number.NaN;
+  return typeof v === "string" && v.trim() === "" ? undefined : v;
+};
+
+const emptyToNaN = (v: unknown): unknown => {
+  if (v === null) return Number.NaN;
+  return typeof v === "string" && v.trim() === "" ? Number.NaN : v;
+};
+
 export const AddMedicineBody = zod.object({
-  name: zod.string(),
-  quantity: zod.number(),
-  price: zod.number(),
-  expiryDate: zod.string(),
-  description: zod.string().optional(),
+  name: zod.string().trim().min(2).max(100),
+  quantity: zod.preprocess(
+    emptyToUndefined,
+    zod.coerce.number().finite().int().min(0).max(2147483647)
+  ),
+  price: zod.preprocess(
+    emptyToUndefined,
+    zod.coerce.number().finite().min(0).max(99999999.99).multipleOf(0.01)
+  ),
+  expiryDate: zod
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry date must be YYYY-MM-DD")
+    .refine(isValidCalendarDate, "Invalid calendar date"),
+  description: zod.string().max(500).optional(),
   isAvailable: zod.boolean().optional(),
 });
 
@@ -64,14 +94,23 @@ export const UpdateMedicineParams = zod.object({
   medicineId: zod.coerce.number(),
 });
 
-export const UpdateMedicineBody = zod.object({
-  name: zod.string().optional(),
-  quantity: zod.number().optional(),
-  price: zod.number().optional(),
-  expiryDate: zod.string().optional(),
-  description: zod.string().optional(),
-  isAvailable: zod.boolean().optional(),
-});
+export const UpdateMedicineBody = zod
+  .object({
+    name: zod.string().trim().min(2).max(100).optional(),
+    quantity: zod.preprocess(emptyToNaN, zod.coerce.number().finite().int().min(0).max(2147483647)).optional(),
+    price: zod.preprocess(emptyToNaN, zod.coerce.number().finite().min(0).max(99999999.99).multipleOf(0.01)).optional(),
+    expiryDate: zod
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry date must be YYYY-MM-DD")
+      .refine(isValidCalendarDate, "Invalid calendar date")
+      .optional(),
+    description: zod.string().max(500).optional(),
+    isAvailable: zod.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field required",
+  });
 
 export const DeleteMedicineParams = zod.object({
   medicineId: zod.coerce.number(),
