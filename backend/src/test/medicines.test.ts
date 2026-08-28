@@ -158,7 +158,7 @@ describe("MED-VALIDATION: add/update contracts", () => {
   ])("rejects add with %s", async (_label, override) => {
     const owner = await registerPharmacy();
     const res = await owner.agent.post("/api/medicines/add").send({
-      name: "Valid Name",
+      ...{ name: "Valid Name" },
       quantity: 5,
       price: 1,
       expiryDate: "2099-01-01",
@@ -176,10 +176,7 @@ describe("MED-VALIDATION: add/update contracts", () => {
   ])("rejects add with %s", async (_label, override) => {
     const owner = await registerPharmacy();
     const res = await owner.agent.post("/api/medicines/add").send({
-      name: "Valid",
-      quantity: 5,
-      price: 1,
-      expiryDate: "2099-01-01",
+      ...{ name: "Valid", quantity: 5, price: 1, expiryDate: "2099-01-01" },
       ...override,
     } as any);
     expect(res.status).toBe(400);
@@ -191,10 +188,7 @@ describe("MED-VALIDATION: add/update contracts", () => {
   ])("rejects add with %s", async (_label, override) => {
     const owner = await registerPharmacy();
     const res = await owner.agent.post("/api/medicines/add").send({
-      name: "Valid",
-      quantity: 5,
-      price: 1,
-      expiryDate: "2099-01-01",
+      ...{ name: "Valid", quantity: 5, price: 1, expiryDate: "2099-01-01" },
       ...override,
     } as any);
     expect(res.status).toBe(400);
@@ -209,10 +203,7 @@ describe("MED-VALIDATION: add/update contracts", () => {
   ])("rejects add with %s", async (_label, override) => {
     const owner = await registerPharmacy();
     const res = await owner.agent.post("/api/medicines/add").send({
-      name: "Valid",
-      quantity: 5,
-      price: 1,
-      expiryDate: "2099-01-01",
+      ...{ name: "Valid", quantity: 5, price: 1, expiryDate: "2099-01-01" },
       ...override,
     } as any);
     expect(res.status).toBe(400);
@@ -224,10 +215,7 @@ describe("MED-VALIDATION: add/update contracts", () => {
   ])("rejects add with %s", async (_label, override) => {
     const owner = await registerPharmacy();
     const res = await owner.agent.post("/api/medicines/add").send({
-      name: "Valid",
-      quantity: 5,
-      price: 1,
-      expiryDate: "2099-01-01",
+      ...{ name: "Valid", quantity: 5, price: 1, expiryDate: "2099-01-01" },
       ...override,
     } as any);
     expect(res.status).toBe(400);
@@ -321,5 +309,72 @@ describe("MED-VALIDATION: add/update contracts", () => {
     expect(after.price).toBe("2.25");
     expect(after.expiryDate).toBe("2030-06-15");
     expect(after.description).toBe("");
+  });
+});
+
+describe("INV-005b: marketplace excludes unapproved or inactive providers", () => {
+  it.each([
+    ["pending", { verificationStatus: "pending" }],
+    ["rejected", { verificationStatus: "rejected" }],
+    ["inactive", { isActive: false }],
+  ])("hides listings whose provider is %s", async (_label, patch) => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const medicine = await addMedicine(owner.agent, { quantity: 5 });
+
+    const [ownerRow] = await db.select({ id: pharmaciesTable.id }).from(pharmaciesTable).where(eq(pharmaciesTable.email, owner.email));
+    await db.update(pharmaciesTable)
+      .set(patch as any)
+      .where(eq(pharmaciesTable.id, ownerRow.id));
+
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    expect(ids).not.toContain(medicine.id);
+  });
+
+  it("lists medicines from an approved, active provider", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const medicine = await addMedicine(owner.agent, { quantity: 5 });
+
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    expect(ids).toContain(medicine.id);
+  });
+});
+
+describe("EXP-002: market expiry boundary — expiring today is still valid", () => {
+  const rightNow = new Date();
+  const today = rightNow.toISOString().slice(0, 10);
+  const yesterday = new Date(rightNow.getTime() - 86400000).toISOString().slice(0, 10);
+  const tomorrow = new Date(rightNow.getTime() + 86400000).toISOString().slice(0, 10);
+
+  it("hides a listing that expired yesterday", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: yesterday });
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    expect(res.body.map((m: { id: number }) => m.id)).not.toContain(med.id);
+  });
+
+  it("lists a listing expiring today", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: today });
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    expect(res.body.map((m: { id: number }) => m.id)).toContain(med.id);
+  });
+
+  it("lists a listing expiring tomorrow", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: tomorrow });
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    expect(res.body.map((m: { id: number }) => m.id)).toContain(med.id);
   });
 });

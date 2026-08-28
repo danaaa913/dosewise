@@ -1,9 +1,11 @@
 ﻿import { Router, type IRouter } from "express";
-import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable } from "../db/index.js";
+import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable, type Request } from "../db/index.js";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { SendRequestBody, AcceptRequestParams, RejectRequestParams, RequestIdParams } from "../zod/schemas.js";
 import { canTransition, type RequestStatus } from "../lib/request-state.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
+import { isExpired } from "../lib/expiry.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -19,45 +21,117 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
     res.status(400).json({ error: "Idempotency-Key header is required (max 255 chars)" }); return;
   }
 
-  const [existing] = await db.select().from(requestsTable).where(and(
+  const serializeRequest = (existing: Request) => ({
+    id: existing.id, requesterPharmacyId: existing.requesterPharmacyId,
+    providerPharmacyId: existing.providerPharmacyId, medicineId: existing.medicineId,
+    requestedQuantity: existing.requestedQuantity, unitPrice: existing.unitPrice,
+    medicineName: existing.medicineName, status: existing.status,
+    requestDate: existing.requestDate.toISOString(),
+    responseDate: existing.responseDate ? existing.responseDate.toISOString() : null,
+    duplicate: true,
+  });
+
+  const resolveIdempotency = async () => {
+    const [byKey] = await db.select().from(requestsTable).where(and(
+      eq(requestsTable.requesterPharmacyId, req.session.pharmacyId!),
+      eq(requestsTable.idempotencyKey, idempotencyKey),
+    ));
+    if (!byKey) return null;
+    if (byKey.medicineId === medicineId && byKey.requestedQuantity === requestedQuantity) {
+      return { kind: "duplicate" as const, row: byKey };
+    }
+    return { kind: "reused" as const, row: byKey };
+  };
+
+  const prior = await resolveIdempotency();
+  if (prior) {
+    if (prior.kind === "duplicate") {
+      res.status(200).json(serializeRequest(prior.row)); return;
+    }
+    res.status(409).json({ error: "Idempotency-Key was already used for a different request", code: "IDEMPOTENCY_KEY_REUSED" }); return;
+  }
+
+  const [row] = await db
+    .select({
+      id: medicinesTable.id, pharmacyId: medicinesTable.pharmacyId,
+      name: medicinesTable.name, quantity: medicinesTable.quantity,
+      price: medicinesTable.price, expiryDate: medicinesTable.expiryDate,
+      isAvailable: medicinesTable.isAvailable,
+      providerVerificationStatus: pharmaciesTable.verificationStatus,
+      providerIsActive: pharmaciesTable.isActive,
+    })
+    .from(medicinesTable)
+    .leftJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
+    .where(eq(medicinesTable.id, medicineId));
+
+  if (!row) { res.status(404).json({ error: "Medicine not found" }); return; }
+  if (row.pharmacyId === req.session.pharmacyId) { res.status(400).json({ error: "Cannot request your own medicine" }); return; }
+  if (row.providerVerificationStatus !== "approved" || row.providerIsActive !== true) {
+    res.status(409).json({ error: "Provider pharmacy is not available", code: "PROVIDER_UNAVAILABLE" }); return;
+  }
+  if (!row.isAvailable) { res.status(400).json({ error: "Medicine is not available" }); return; }
+  if (isExpired(row.expiryDate)) {
+    res.status(400).json({ error: "Medicine is expired", code: "MEDICINE_EXPIRED" }); return;
+  }
+  if (requestedQuantity > row.quantity) {
+    res.status(400).json({ error: `Requested quantity exceeds available stock (${row.quantity})` }); return;
+  }
+
+  const [pendingDuplicate] = await db.select({ id: requestsTable.id }).from(requestsTable).where(and(
     eq(requestsTable.requesterPharmacyId, req.session.pharmacyId!),
-    eq(requestsTable.idempotencyKey, idempotencyKey),
+    eq(requestsTable.medicineId, medicineId),
+    eq(requestsTable.status, "pending"),
   ));
-  if (existing) {
-    res.status(200).json({
-      id: existing.id, requesterPharmacyId: existing.requesterPharmacyId,
-      providerPharmacyId: existing.providerPharmacyId, medicineId: existing.medicineId,
-      requestedQuantity: existing.requestedQuantity, unitPrice: existing.unitPrice,
-      medicineName: existing.medicineName, status: existing.status,
-      requestDate: existing.requestDate.toISOString(),
-      responseDate: existing.responseDate ? existing.responseDate.toISOString() : null,
-      duplicate: true,
-    });
+  if (pendingDuplicate) {
+    const race = await resolveIdempotency();
+    if (race) {
+      if (race.kind === "duplicate") { res.status(200).json(serializeRequest(race.row)); return; }
+      res.status(409).json({ error: "Idempotency-Key was already used for a different request", code: "IDEMPOTENCY_KEY_REUSED" }); return;
+    }
+    res.status(409).json({ error: "A pending request for this medicine already exists", code: "DUPLICATE_PENDING_REQUEST" }); return;
+  }
+
+  let request: Request;
+  try {
+    const [inserted] = await db.insert(requestsTable).values({
+      requesterPharmacyId: req.session.pharmacyId!,
+      providerPharmacyId: row.pharmacyId,
+      medicineId, requestedQuantity,
+      unitPrice: row.price,
+      medicineName: row.name,
+      idempotencyKey,
+    }).returning();
+    request = inserted;
+  } catch (err) {
+    const underlying = (err as { cause?: { code?: string; constraint?: string } }).cause ?? err;
+    const violation = underlying as { code?: string; constraint?: string };
+    if (violation.code !== "23505") {
+      logger.error({ err }, "requests/send: unexpected database error");
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+
+    const race = await resolveIdempotency();
+    if (violation.constraint === "requests_requester_medicine_pending_idx") {
+      if (race) {
+        if (race.kind === "duplicate") { res.status(200).json(serializeRequest(race.row)); return; }
+        res.status(409).json({ error: "Idempotency-Key was already used for a different request", code: "IDEMPOTENCY_KEY_REUSED" }); return;
+      }
+      res.status(409).json({ error: "A pending request for this medicine already exists", code: "DUPLICATE_PENDING_REQUEST" }); return;
+    }
+    if (violation.constraint === "requests_requester_idempotency_idx") {
+      if (race && race.kind === "duplicate") { res.status(200).json(serializeRequest(race.row)); return; }
+      res.status(409).json({ error: "Idempotency-Key was already used for a different request", code: "IDEMPOTENCY_KEY_REUSED" }); return;
+    }
+    logger.error({ err, constraint: violation.constraint }, "requests/send: unexpected unique violation");
+    res.status(500).json({ error: "Internal server error" });
     return;
   }
 
-  const [medicine] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicineId));
-  if (!medicine) { res.status(404).json({ error: "Medicine not found" }); return; }
-  if (!medicine.isAvailable) { res.status(400).json({ error: "Medicine is not available" }); return; }
-  if (medicine.pharmacyId === req.session.pharmacyId) { res.status(400).json({ error: "Cannot request your own medicine" }); return; }
-  if (new Date(medicine.expiryDate) < new Date()) { res.status(400).json({ error: "Medicine is expired" }); return; }
-  if (requestedQuantity > medicine.quantity) {
-    res.status(400).json({ error: `Requested quantity exceeds available stock (${medicine.quantity})` }); return;
-  }
-
-  const [request] = await db.insert(requestsTable).values({
-    requesterPharmacyId: req.session.pharmacyId!,
-    providerPharmacyId: medicine.pharmacyId,
-    medicineId, requestedQuantity,
-    unitPrice: medicine.price,
-    medicineName: medicine.name,
-    idempotencyKey,
-  }).returning();
-
   const [requester] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   await db.insert(notificationsTable).values({
-    pharmacyId: medicine.pharmacyId,
-    message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${medicine.name} (الكمية: ${requestedQuantity})`,
+    pharmacyId: row.pharmacyId,
+    message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${row.name} (الكمية: ${requestedQuantity})`,
   });
 
   res.status(201).json({

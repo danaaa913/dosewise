@@ -29,9 +29,19 @@ export function isMutationAllowed(
 
 const fifteenMinutes = 15 * 60 * 1000;
 
+export const DEFAULT_API_RATE_LIMIT = 300;
+
+export function parseRateLimit(value: string | undefined, fallback: number = DEFAULT_API_RATE_LIMIT): number {
+  if (value === undefined) return fallback;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return fallback;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export const apiLimiter = rateLimit({
   windowMs: fifteenMinutes,
-  limit: 300,
+  limit: parseRateLimit(process.env.API_RATE_LIMIT),
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });

@@ -10,12 +10,14 @@ async function request<T>(
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...options.headers },
     ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const thrown = new Error(err.error || `HTTP ${res.status}`) as Error & { code?: string };
+    thrown.code = err.code;
+    throw thrown;
   }
   return res.json();
 }
@@ -84,10 +86,10 @@ export const api = {
       request(`/medicines/${medicineId}/delete`, { method: "DELETE" }),
   },
   requests: {
-    send: (data: { medicineId: number; requestedQuantity: number }) =>
+    send: (data: { medicineId: number; requestedQuantity: number }, idempotencyKey: string) =>
       request("/requests/send", {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(data),
       }),
     sent: () => request<ExchangeRequest[]>("/requests/sent"),

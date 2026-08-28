@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Package, SearchX } from "lucide-react";
 import { Layout } from "@/components/layout";
@@ -14,13 +14,28 @@ export default function BrowsePage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [requesting, setRequesting] = useState<AvailableMedicine | null>(null);
+  const [idemKey, setIdemKey] = useState<string | null>(null);
   const { pharmacy } = useAuth();
   const notVerified = pharmacy?.verificationStatus !== "approved";
   const [qty, setQty] = useState("1");
   const [requestError, setRequestError] = useState("");
   const [requestSuccess, setRequestSuccess] = useState("");
+  const submittingRef = useRef(false);
 
   const { t } = useLanguage();
+
+  useEffect(() => {
+    if (!requesting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setRequesting(null);
+        setRequestError("");
+        setIdemKey(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [requesting]);
 
   const { data: medicines, isLoading, isError, refetch } = useQuery({
     queryKey: ["available-medicines", search],
@@ -29,17 +44,30 @@ export default function BrowsePage() {
 
   const sendMut = useMutation({
     mutationFn: () =>
-      api.requests.send({
-        medicineId: requesting!.id,
-        requestedQuantity: Number(qty),
-      }),
+      api.requests.send(
+        {
+          medicineId: requesting!.id,
+          requestedQuantity: Number(qty),
+        },
+        idemKey!
+      ),
     onSuccess: () => {
       setRequestSuccess("تم إرسال الطلب بنجاح");
       setRequesting(null);
+      setIdemKey(null);
       qc.invalidateQueries({ queryKey: ["requests-sent"] });
       setTimeout(() => setRequestSuccess(""), 3000);
     },
-    onError: (e: any) => setRequestError(e.message),
+    onError: (e: any) => {
+      const code = (e as { code?: string })?.code;
+      const known: Record<string, string> = {
+        PROVIDER_UNAVAILABLE: t.errorCodes.PROVIDER_UNAVAILABLE,
+        DUPLICATE_PENDING_REQUEST: t.errorCodes.DUPLICATE_PENDING_REQUEST,
+        IDEMPOTENCY_KEY_REUSED: t.errorCodes.IDEMPOTENCY_KEY_REUSED,
+        MEDICINE_EXPIRED: t.errorCodes.MEDICINE_EXPIRED,
+      };
+      setRequestError(code && known[code] ? known[code] : t.requests.errors.send);
+    },
   });
 
   return (
@@ -72,7 +100,7 @@ export default function BrowsePage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-semibold text-slate-800">إرسال طلب</h3>
-              <button onClick={() => { setRequesting(null); setRequestError(""); }} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+              <button onClick={() => { setRequesting(null); setRequestError(""); setIdemKey(null); }} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
             </div>
             <div className="p-6">
               <p className="text-sm text-slate-700 mb-1 font-medium">{requesting.name}</p>
@@ -98,14 +126,20 @@ export default function BrowsePage() {
 
               <div className="flex gap-3 mt-4">
                 <button
-                  onClick={() => sendMut.mutate()}
+                  onClick={() => {
+                    if (submittingRef.current) return;
+                    submittingRef.current = true;
+                    sendMut.mutate(undefined, {
+                      onSettled: () => { submittingRef.current = false; },
+                    });
+                  }}
                   disabled={sendMut.isPending || notVerified}
                   className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
                 >
                   {notVerified ? "الإرسال متاح بعد اعتماد الصيدلية" : sendMut.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
                 </button>
                 <button
-                  onClick={() => { setRequesting(null); setRequestError(""); }}
+                  onClick={() => { setRequesting(null); setRequestError(""); setIdemKey(null); }}
                   className="px-4 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors"
                 >
                   إلغاء
@@ -177,6 +211,7 @@ export default function BrowsePage() {
                   setRequesting(m);
                   setQty("1");
                   setRequestError("");
+                  setIdemKey(crypto.randomUUID());
                 }}
                 className="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
               >

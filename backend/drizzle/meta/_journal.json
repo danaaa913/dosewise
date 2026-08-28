@@ -15,6 +15,13 @@
       "when": 1787645785164,
       "tag": "0001_neat_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787903601928,
+      "tag": "0002_steady_loki",
+      "breakpoints": true
     }
   ]
 }

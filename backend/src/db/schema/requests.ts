@@ -1,4 +1,5 @@
 ﻿import { pgTable, pgEnum, text, serial, integer, numeric, uniqueIndex, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { pharmaciesTable } from "./pharmacies.js";
@@ -31,6 +32,9 @@ export const requestsTable = pgTable("requests", {
   responseDate: timestamp("response_date", { withTimezone: true }),
 }, (table) => [
   uniqueIndex("requests_requester_idempotency_idx").on(table.requesterPharmacyId, table.idempotencyKey),
+  uniqueIndex("requests_requester_medicine_pending_idx")
+    .on(table.requesterPharmacyId, table.medicineId)
+    .where(sql`${table.status} = 'pending'`),
 ]);
 
 export const insertRequestSchema = createInsertSchema(requestsTable).omit({

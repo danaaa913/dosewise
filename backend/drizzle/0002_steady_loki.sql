@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "requests_requester_medicine_pending_idx" ON "requests" USING btree ("requester_pharmacy_id","medicine_id") WHERE "requests"."status" = 'pending';

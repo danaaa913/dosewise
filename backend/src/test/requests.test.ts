@@ -1,6 +1,6 @@
-﻿import { describe, it, expect, afterAll } from "vitest";
+﻿import { describe, it, expect, afterAll, afterEach, vi } from "vitest";
 import request from "supertest";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import app from "../app.js";
 import { db, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
 
@@ -308,7 +308,7 @@ describe("EXC-010: idempotency prevents duplicate requests", () => {
     createdRequestIds.push(first.body.id);
   });
 
-  it("missing idempotency key is rejected", async () => {
+it("missing idempotency key is rejected", async () => {
     const provider = await registerPharmacy();
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
@@ -318,5 +318,319 @@ describe("EXC-010: idempotency prevents duplicate requests", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("Idempotency");
+  });
+});
+
+async function pharmacyIdByEmail(email: string): Promise<number> {
+  const [p] = await db.select({ id: pharmaciesTable.id }).from(pharmaciesTable).where(eq(pharmaciesTable.email, email));
+  return p!.id;
+}
+
+describe("EXC-011: provider status is re-checked when sending", () => {
+  it("rejects a request when the provider verification is pending", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    await db.update(pharmaciesTable)
+      .set({ verificationStatus: "pending", verifiedAt: null })
+      .where(eq(pharmaciesTable.id, await pharmacyIdByEmail(provider.email)));
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(res.body.error).not.toContain("verification");
+  });
+
+  it("rejects a request when the provider verification is rejected, without leaking the reason", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    await db.update(pharmaciesTable)
+      .set({ verificationStatus: "rejected", rejectionReason: "docs unclear" })
+      .where(eq(pharmaciesTable.id, await pharmacyIdByEmail(provider.email)));
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(JSON.stringify(res.body)).not.toContain("docs unclear");
+    expect(JSON.stringify(res.body)).not.toContain("rejectionReason");
+  });
+
+  it("rejects a request when the provider pharmacy is inactive", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    await db.update(pharmaciesTable)
+      .set({ isActive: false })
+      .where(eq(pharmaciesTable.id, await pharmacyIdByEmail(provider.email)));
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PROVIDER_UNAVAILABLE");
+  });
+});
+
+describe("EXP-003: send expiry boundary — expiring today is acceptable", () => {
+  const rightNow = new Date();
+  const today = rightNow.toISOString().slice(0, 10);
+  const yesterday = new Date(rightNow.getTime() - 86400000).toISOString().slice(0, 10);
+  const tomorrow = new Date(rightNow.getTime() + 86400000).toISOString().slice(0, 10);
+
+  it("rejects a request for a medicine that expired yesterday with MEDICINE_EXPIRED", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5, expiryDate: yesterday });
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("MEDICINE_EXPIRED");
+  });
+
+  it("accepts a request for a medicine expiring today", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5, expiryDate: today });
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(201);
+    createdRequestIds.push(res.body.id);
+  });
+
+  it("accepts a request for a medicine expiring tomorrow", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5, expiryDate: tomorrow });
+
+    const res = await sendRequest(requester.agent, medicine.id, 1);
+    expect(res.status).toBe(201);
+    createdRequestIds.push(res.body.id);
+  });
+});
+
+describe("EXC-012: duplicate pending requests are rejected", () => {
+  it("allows the first pending request and rejects a second one", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const first = await sendRequest(requester.agent, medicine.id, 2);
+    expect(first.status).toBe(201);
+    createdRequestIds.push(first.body.id);
+
+    const second = await sendRequest(requester.agent, medicine.id, 3);
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe("DUPLICATE_PENDING_REQUEST");
+
+    const rows = await db.select().from(requestsTable).where(and(
+      eq(requestsTable.requesterPharmacyId, await pharmacyIdByEmail(requester.email)),
+      eq(requestsTable.medicineId, medicine.id),
+      eq(requestsTable.status, "pending"),
+    ));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("two concurrent sends with different keys yield exactly one success", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const results = await Promise.all([
+      sendRequest(requester.agent, medicine.id, 1),
+      sendRequest(requester.agent, medicine.id, 1),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 409]);
+
+    const success = results.find((r) => r.status === 201);
+    const conflict = results.find((r) => r.status === 409);
+    expect(success!.body.status).toBe("pending");
+    expect(conflict!.body.code).toBe("DUPLICATE_PENDING_REQUEST");
+    createdRequestIds.push(success!.body.id);
+
+    const rows = await db.select({ id: requestsTable.id }).from(requestsTable).where(and(
+      eq(requestsTable.requesterPharmacyId, await pharmacyIdByEmail(requester.email)),
+      eq(requestsTable.medicineId, medicine.id),
+      eq(requestsTable.status, "pending"),
+    ));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("allows a new request after the previous one was rejected", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const first = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(first.body.id);
+    const reject = await provider.agent.post(`/api/requests/${first.body.id}/reject`);
+    expect(reject.status).toBe(200);
+
+    const second = await sendRequest(requester.agent, medicine.id, 2);
+    expect(second.status).toBe(201);
+    createdRequestIds.push(second.body.id);
+  });
+
+  it("allows a new request after the previous one was cancelled", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const first = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(first.body.id);
+    const cancel = await requester.agent.post(`/api/requests/${first.body.id}/cancel`);
+    expect(cancel.status).toBe(200);
+
+    const second = await sendRequest(requester.agent, medicine.id, 2);
+    expect(second.status).toBe(201);
+    createdRequestIds.push(second.body.id);
+  });
+
+  it("allows a new request after the previous one was completed", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const first = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(first.body.id);
+    const accept = await provider.agent.post(`/api/requests/${first.body.id}/accept`);
+    expect(accept.status).toBe(200);
+    const complete = await requester.agent.post(`/api/requests/${first.body.id}/complete`);
+    expect(complete.status).toBe(200);
+
+    const second = await sendRequest(requester.agent, medicine.id, 2);
+    expect(second.status).toBe(201);
+    createdRequestIds.push(second.body.id);
+  });
+});
+
+describe("EXC-013: idempotency key reuse with a different payload is rejected", () => {
+  it("409 when the same key is reused with a different medicine", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medA = await addMedicine(provider.agent, { quantity: 5 });
+    const medB = await addMedicine(provider.agent, { quantity: 5 });
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-reuse-med-${keyCounter}`;
+    const first = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medA.id, requestedQuantity: 1 });
+    expect(first.status).toBe(201);
+    createdRequestIds.push(first.body.id);
+
+    const second = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medB.id, requestedQuantity: 1 });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe("IDEMPOTENCY_KEY_REUSED");
+  });
+
+  it("409 when the same key is reused with a different quantity", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-reuse-qty-${keyCounter}`;
+    const first = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    expect(first.status).toBe(201);
+    createdRequestIds.push(first.body.id);
+
+    const second = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 2 });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe("IDEMPOTENCY_KEY_REUSED");
+  });
+
+  it("concurrent identical sends with the same key create one request and return one duplicate", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-race-key-${keyCounter}`;
+    const results = await Promise.all([
+      requester.agent.post("/api/requests/send")
+        .set("Idempotency-Key", sharedKey)
+        .send({ medicineId: medicine.id, requestedQuantity: 1 }),
+      requester.agent.post("/api/requests/send")
+        .set("Idempotency-Key", sharedKey)
+        .send({ medicineId: medicine.id, requestedQuantity: 1 }),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 201]);
+
+    const duplicate = results.find((r) => r.status === 200);
+    expect(duplicate!.body.duplicate).toBe(true);
+
+    const rows = await db.select().from(requestsTable).where(eq(requestsTable.idempotencyKey, sharedKey));
+    expect(rows).toHaveLength(1);
+    createdRequestIds.push(rows[0].id);
+  });
+
+  it("a different key is still blocked while a pending request exists", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const first = await sendRequest(requester.agent, medicine.id, 1);
+    expect(first.status).toBe(201);
+    createdRequestIds.push(first.body.id);
+
+    const second = await sendRequest(requester.agent, medicine.id, 1);
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe("DUPLICATE_PENDING_REQUEST");
+  });
+});
+
+describe("EXC-014: unexpected database errors return a generic 500 without leaking details", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("a non-unique database error is not leaked to the client", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent);
+
+    keyCounter += 1;
+    vi.spyOn(db, "insert").mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    const res = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", `${stamp}-exc14a-${keyCounter}`)
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Internal server error" });
+    expect(res.text).not.toContain("boom");
+    expect(res.text).not.toContain("Failed query");
+  });
+
+  it("a unique violation with an unknown constraint stays generic (no constraint name leaked)", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent);
+
+    keyCounter += 1;
+    const drizzleLikeError = new Error("Failed query: insert into \"requests\" ...");
+    (drizzleLikeError as { cause?: unknown }).cause = { code: "23505", constraint: "some_unknown_constraint" };
+    vi.spyOn(db, "insert").mockImplementationOnce(() => {
+      throw drizzleLikeError;
+    });
+    const res = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", `${stamp}-exc14b-${keyCounter}`)
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Internal server error" });
+    expect(res.text).not.toContain("some_unknown_constraint");
+    expect(res.text).not.toContain("Failed query");
   });
 });

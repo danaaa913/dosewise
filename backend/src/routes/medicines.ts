@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, medicinesTable, pharmaciesTable } from "../db/index.js";
-import { eq, and, gt, gte } from "drizzle-orm";
+import { eq, and, gt, gte, ne } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
+import { todayUtc } from "../lib/expiry.js";
 
 const router: IRouter = Router();
 
@@ -37,7 +38,6 @@ router.get("/medicines/my", requireApprovedPharmacy, async (req, res): Promise<v
 
 router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const search = req.query.search as string | undefined;
-  const today = new Date().toISOString().slice(0, 10);
   const medicines = await db
     .select({
       id: medicinesTable.id, pharmacyId: medicinesTable.pharmacyId,
@@ -47,17 +47,19 @@ router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Pr
       pharmacyName: pharmaciesTable.name, pharmacyCity: pharmaciesTable.city,
     })
     .from(medicinesTable)
-    .leftJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
+    .innerJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
     .where(and(
       eq(medicinesTable.isAvailable, true),
       gt(medicinesTable.quantity, 0),
-      gte(medicinesTable.expiryDate, today),
+      gte(medicinesTable.expiryDate, todayUtc()),
+      eq(pharmaciesTable.verificationStatus, "approved"),
+      eq(pharmaciesTable.isActive, true),
+      ne(medicinesTable.pharmacyId, req.session.pharmacyId!),
     ));
 
-  const filtered = medicines.filter(m => m.pharmacyId !== req.session.pharmacyId);
   const searched = search
-    ? filtered.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
-    : filtered;
+    ? medicines.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
+    : medicines;
 
   res.json(searched.map(m => ({
     id: m.id, pharmacyId: m.pharmacyId, name: m.name, quantity: m.quantity,

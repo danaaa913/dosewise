@@ -11,6 +11,10 @@ export const translations = {
       PHARMACY_NOT_VERIFIED: "حسابك قيد المراجعة",
       PHARMACY_REJECTED: "لم يتم اعتماد حسابك",
       PHARMACY_INACTIVE: "حسابك غير نشط",
+      PROVIDER_UNAVAILABLE: "صيدلية التوريد غير متاحة حالياً",
+      DUPLICATE_PENDING_REQUEST: "لديك طلب معلق لهذا الدواء بالفعل",
+      IDEMPOTENCY_KEY_REUSED: "تم استخدام مفتاح الطلب لطلب مختلف",
+      MEDICINE_EXPIRED: "الدواء منتهي الصلاحية",
     },
     accountStatus: {
       title: "حالة الحساب",
@@ -80,6 +84,11 @@ export const translations = {
     errors: {
       query: "حدث خطأ أثناء تحميل البيانات",
       retry: "إعادة المحاولة",
+    },
+    requests: {
+      errors: {
+        send: "فشل إرسال الطلب — حاول مجدداً",
+      },
     },
     dashboard: {
       welcome: "مرحباً، {name}",
@@ -442,6 +451,10 @@ export const translations = {
       PHARMACY_NOT_VERIFIED: "Your account is under review",
       PHARMACY_REJECTED: "Your account was not approved",
       PHARMACY_INACTIVE: "Your account is inactive",
+      PROVIDER_UNAVAILABLE: "Provider pharmacy is not available",
+      DUPLICATE_PENDING_REQUEST: "You already have a pending request for this medicine",
+      IDEMPOTENCY_KEY_REUSED: "This request key was used for a different request",
+      MEDICINE_EXPIRED: "This medicine has expired",
     },
     accountStatus: {
       title: "Account status",
@@ -511,6 +524,11 @@ export const translations = {
     errors: {
       query: "Something went wrong loading data",
       retry: "Try again",
+    },
+    requests: {
+      errors: {
+        send: "Failed to send the request — try again",
+      },
     },
     dashboard: {
       welcome: "Welcome, {name}",
