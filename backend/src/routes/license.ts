@@ -2,15 +2,11 @@ import { Router, type IRouter } from "express";
 import { db, pharmaciesTable } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { UpdateLicenseBody } from "../zod/schemas.js";
+import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 
 const router: IRouter = Router();
 
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
-
-router.get("/pharmacy/license", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/pharmacy/license", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const [pharmacy] = await db.select({
     licenseNumber: pharmaciesTable.licenseNumber,
     licenseDocName: pharmaciesTable.licenseDocName,
@@ -28,7 +24,7 @@ router.get("/pharmacy/license", requirePharmacy, async (req, res): Promise<void>
   });
 });
 
-router.put("/pharmacy/license", requirePharmacy, async (req, res): Promise<void> => {
+router.put("/pharmacy/license", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const parsed = UpdateLicenseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -50,7 +46,7 @@ router.put("/pharmacy/license", requirePharmacy, async (req, res): Promise<void>
   res.json({ message: "License information updated" });
 });
 
-router.get("/pharmacy/license/document", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/pharmacy/license/document", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const [pharmacy] = await db.select({
     licenseDocName: pharmaciesTable.licenseDocName,
     licenseDocMime: pharmaciesTable.licenseDocMime,

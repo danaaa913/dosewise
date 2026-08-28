@@ -65,8 +65,6 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
   const valid = await bcrypt.compare(password, pharmacy.passwordHash);
   if (!valid) { res.status(401).json({ error: "Invalid email or password" }); return; }
 
-  if (!pharmacy.isActive) { res.status(403).json({ error: "Account is deactivated" }); return; }
-
   startPharmacySession(req, res, pharmacy.id, 200, {
     message: "Logged in successfully",
     pharmacy: pharmacyPayload(pharmacy),

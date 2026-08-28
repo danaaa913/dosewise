@@ -67,6 +67,9 @@ describe("SUB-004: demo payment guardrails", () => {
       address: "Payment Test Street",
     });
     expect(reg.status).toBe(201);
+    await db.update(pharmaciesTable)
+      .set({ verificationStatus: "approved", verifiedAt: new Date() })
+      .where(eq(pharmaciesTable.id, reg.body.pharmacy.id));
 
     const agent = request.agent(app);
     await agent.post("/api/auth/login").send({ email, password: validBase.password }).expect(200);

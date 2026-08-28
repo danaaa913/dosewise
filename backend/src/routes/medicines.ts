@@ -2,15 +2,11 @@ import { Router, type IRouter } from "express";
 import { db, medicinesTable, pharmaciesTable } from "../db/index.js";
 import { eq, and, gt, gte } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
+import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 
 const router: IRouter = Router();
 
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
-
-router.post("/medicines/add", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/medicines/add", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const parsed = AddMedicineBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -29,7 +25,7 @@ router.post("/medicines/add", requirePharmacy, async (req, res): Promise<void> =
   });
 });
 
-router.get("/medicines/my", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/medicines/my", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const medicines = await db.select().from(medicinesTable)
     .where(eq(medicinesTable.pharmacyId, req.session.pharmacyId!));
   res.json(medicines.map(m => ({
@@ -39,7 +35,7 @@ router.get("/medicines/my", requirePharmacy, async (req, res): Promise<void> => 
   })));
 });
 
-router.get("/medicines/available", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const search = req.query.search as string | undefined;
   const today = new Date().toISOString().slice(0, 10);
   const medicines = await db
@@ -70,7 +66,7 @@ router.get("/medicines/available", requirePharmacy, async (req, res): Promise<vo
   })));
 });
 
-router.put("/medicines/:medicineId/update", requirePharmacy, async (req, res): Promise<void> => {
+router.put("/medicines/:medicineId/update", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const params = UpdateMedicineParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateMedicineBody.safeParse(req.body);
@@ -98,7 +94,7 @@ router.put("/medicines/:medicineId/update", requirePharmacy, async (req, res): P
   });
 });
 
-router.delete("/medicines/:medicineId/delete", requirePharmacy, async (req, res): Promise<void> => {
+router.delete("/medicines/:medicineId/delete", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const params = DeleteMedicineParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 

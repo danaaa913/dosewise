@@ -28,6 +28,9 @@ async function registerPharmacy(withLicense = false) {
       : {}),
   });
   expect(res.status).toBe(201);
+  await db.update(pharmaciesTable)
+    .set({ verificationStatus: "approved", verifiedAt: new Date() })
+    .where(eq(pharmaciesTable.id, res.body.pharmacy.id));
 
   const agent = request.agent(app);
   await agent.post("/api/auth/login").send({ email, password: "strong-password-123" }).expect(200);

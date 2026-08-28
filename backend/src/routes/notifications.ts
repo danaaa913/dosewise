@@ -2,15 +2,11 @@ import { Router, type IRouter } from "express";
 import { db, notificationsTable } from "../db/index.js";
 import { eq, and } from "drizzle-orm";
 import { MarkNotificationReadParams, GetNotificationsQueryParams } from "../zod/schemas.js";
+import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 
 const router: IRouter = Router();
 
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
-
-router.get("/notifications/my", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/notifications/my", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const params = GetNotificationsQueryParams.safeParse(req.query);
   const unreadOnly = params.success && params.data.unread_only === true;
 
@@ -32,7 +28,7 @@ router.get("/notifications/my", requirePharmacy, async (req, res): Promise<void>
   });
 });
 
-router.post("/notifications/:notificationId/mark-read", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/notifications/:notificationId/mark-read", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const params = MarkNotificationReadParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 

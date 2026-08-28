@@ -39,20 +39,36 @@ afterAll(async () => {
   }
 });
 
-describe("AUTH-004: inactive pharmacy cannot log in", () => {
-  it("returns 403 and does not create a session", async () => {
+describe("AUTH-004: inactive pharmacy can log in but cannot operate", () => {
+  it("creates a session, reports isActive=false, and blocks operational access with PHARMACY_INACTIVE", async () => {
     await createPharmacy();
     await db.update(pharmaciesTable)
-      .set({ isActive: false })
+      .set({ verificationStatus: "approved", verifiedAt: new Date(), isActive: false })
       .where(eq(pharmaciesTable.email, createdEmails[0]));
 
     const res = await request(app)
       .post("/api/auth/login")
       .send({ email: createdEmails[0], password: basePharmacy.password });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
     const cookies = setCookiesOf(res);
-    expect(cookies.some((c) => c.startsWith(SESSION_COOKIE_NAME))).toBe(false);
+    expect(cookies.some((c) => c.startsWith(SESSION_COOKIE_NAME))).toBe(true);
+    const sid = cookies.find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`))!.split(";")[0];
+
+    const check = await request(app).get("/api/auth/check").set("Cookie", sid);
+    expect(check.status).toBe(200);
+    expect(check.body.loggedIn).toBe(true);
+    expect(check.body.pharmacy.isActive).toBe(false);
+
+    const blocked = await request(app).get("/api/medicines/available").set("Cookie", sid);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe("PHARMACY_INACTIVE");
+
+    const logout = await request(app).post("/api/auth/logout").set("Cookie", sid);
+    expect(logout.status).toBe(200);
+
+    const checkAfter = await request(app).get("/api/auth/check").set("Cookie", sid);
+    expect(checkAfter.body.loggedIn).toBe(false);
 
     await db.update(pharmaciesTable)
       .set({ isActive: true })

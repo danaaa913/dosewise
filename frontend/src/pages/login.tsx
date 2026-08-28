@@ -30,9 +30,14 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await api.auth.login({ email: email.trim(), password });
+      const data = await api.auth.login({ email: email.trim(), password });
       await refresh();
-      window.location.href = "/dashboard";
+      const p = data.pharmacy;
+      if (p && p.verificationStatus === "approved" && p.isActive) {
+        window.location.href = "/dashboard";
+      } else {
+        window.location.href = "/account-status";
+      }
     } catch (err: any) {
       setError(err.message || t.login.error);
     } finally {

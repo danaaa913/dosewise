@@ -32,9 +32,9 @@ export const api = {
       password: string;
       licenseNumber?: string;
       licenseDoc?: { name: string; mime: string; data: string };
-    }) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+    }) => request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
     login: (data: { email: string; password: string }) =>
-      request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+      request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
     check: () => request<AuthCheckResponse>("/auth/check"),
     logout: () => request("/auth/logout", { method: "POST" }),
   },
@@ -154,6 +154,11 @@ export interface Pharmacy {
   rejectionReason: string | null;
   subscriptionPlan: string | null;
   subscriptionEndDate: string | null;
+}
+
+export interface AuthResponse {
+  message: string;
+  pharmacy: Pharmacy;
 }
 
 export interface AuthCheckResponse {

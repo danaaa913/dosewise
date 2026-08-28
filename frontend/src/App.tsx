@@ -15,6 +15,7 @@ import RequestsPage from "@/pages/requests";
 import SubscriptionsPage from "@/pages/subscriptions";
 import NotificationsPage from "@/pages/notifications";
 import AnalyticsPage from "@/pages/analytics";
+import AccountStatusPage from "@/pages/account-status";
 import AboutPage from "@/pages/about";
 import ContactPage from "@/pages/contact";
 import AdminLoginPage from "@/pages/admin/login";
@@ -42,9 +43,18 @@ function LoadingScreen() {
 }
 
 function PharmacyRoute({ component: Component }: { component: React.ComponentType }) {
-  const { loggedIn, isAdmin, loading } = useAuth();
+  const { loggedIn, isAdmin, isOperational, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!loggedIn || isAdmin) return <Redirect to="/login" />;
+  if (!isOperational) return <Redirect to="/account-status" />;
+  return <Component />;
+}
+
+function AccountStatusRoute({ component: Component }: { component: React.ComponentType }) {
+  const { loggedIn, isAdmin, isOperational, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!loggedIn || isAdmin) return <Redirect to="/login" />;
+  if (isOperational) return <Redirect to="/dashboard" />;
   return <Component />;
 }
 
@@ -56,10 +66,11 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
 }
 
 function GuestRoute({ component: Component }: { component: React.ComponentType }) {
-  const { loggedIn, isAdmin, loading } = useAuth();
+  const { loggedIn, isAdmin, isOperational, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (loggedIn && !isAdmin) return <Redirect to="/dashboard" />;
   if (loggedIn && isAdmin) return <Redirect to="/admin/dashboard" />;
+  if (loggedIn && isOperational) return <Redirect to="/dashboard" />;
+  if (loggedIn && !isOperational) return <Redirect to="/account-status" />;
   return <Component />;
 }
 
@@ -77,8 +88,9 @@ function Router() {
       <Route path="/notifications" component={() => <PharmacyRoute component={NotificationsPage} />} />
       <Route path="/analytics" component={() => <PharmacyRoute component={AnalyticsPage} />} />
       <Route path="/ai" component={() => <Redirect to="/analytics" replace />} />
-      <Route path="/about" component={() => <PharmacyRoute component={AboutPage} />} />
-      <Route path="/contact" component={() => <PharmacyRoute component={ContactPage} />} />
+      <Route path="/account-status" component={() => <AccountStatusRoute component={AccountStatusPage} />} />
+      <Route path="/about" component={AboutPage} />
+      <Route path="/contact" component={ContactPage} />
       <Route path="/admin" component={AdminLoginPage} />
       <Route path="/admin/dashboard" component={() => <AdminRoute component={AdminDashboardPage} />} />
       <Route path="/admin/pharmacies" component={() => <AdminRoute component={AdminDashboardPage} />} />

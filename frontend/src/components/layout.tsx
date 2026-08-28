@@ -69,10 +69,12 @@ interface LayoutProps {
 }
 
 function useUnreadCount() {
+  const { isOperational } = useAuth();
   const { data } = useQuery({
     queryKey: ["notifications-count"],
     queryFn: () => api.notifications.my(),
     refetchInterval: 30000,
+    enabled: isOperational,
   });
   return data?.unreadCount ?? 0;
 }

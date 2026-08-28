@@ -9,6 +9,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
+  isOperational: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextValue>({
   loggedIn: false,
   isAdmin: false,
   pharmacy: null,
+  isOperational: false,
   refresh: async () => {},
   logout: async () => {},
 });
@@ -39,8 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin: data.isAdmin,
         pharmacy: data.pharmacy ?? null,
       });
-    } catch {
-      setState({ loading: false, loggedIn: false, isAdmin: false, pharmacy: null });
+    } catch (err) {
+      setState((prev) => ({ ...prev, loading: false }));
+      throw err;
     }
   }, []);
 
@@ -50,11 +53,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    refresh().catch(() => {});
   }, [refresh]);
 
+  const isOperational = Boolean(
+    state.loggedIn &&
+      !state.isAdmin &&
+      state.pharmacy &&
+      state.pharmacy.verificationStatus === "approved" &&
+      state.pharmacy.isActive
+  );
+
   return (
-    <AuthContext.Provider value={{ ...state, refresh, logout }}>
+    <AuthContext.Provider value={{ ...state, isOperational, refresh, logout }}>
       {children}
     </AuthContext.Provider>
   );

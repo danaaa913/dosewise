@@ -3,13 +3,9 @@ import { db, pharmaciesTable, subscriptionPaymentsTable } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { ProcessPaymentBody } from "../zod/schemas.js";
 import { randomUUID } from "crypto";
+import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 
 const router: IRouter = Router();
-
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
 
 const PLANS = [
   { id: "free", name: "المجانية", price: 0, currency: "JOD", durationDays: 365,
@@ -22,7 +18,7 @@ const PLANS = [
 
 const DEMO_PAYMENT_ENABLED = (process.env.DEMO_PAYMENT ?? "true") !== "false";
 
-router.get("/subscriptions/status", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/subscriptions/status", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const [pharmacy] = await db.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
   if (!pharmacy.isSubscribed) {
     res.json({ isSubscribed: false, plan: null, startDate: null, endDate: null, daysRemaining: null, demoMode: DEMO_PAYMENT_ENABLED }); return;
@@ -42,7 +38,7 @@ router.get("/subscriptions/plans", async (_req, res): Promise<void> => {
   res.json({ demoMode: DEMO_PAYMENT_ENABLED, plans: PLANS });
 });
 
-router.post("/subscriptions/payment", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/subscriptions/payment", requireApprovedPharmacy, async (req, res): Promise<void> => {
   if (!DEMO_PAYMENT_ENABLED) {
     res.status(403).json({ error: "Real payments are not enabled yet. Subscriptions are in demo mode only." }); return;
   }
@@ -74,7 +70,7 @@ router.post("/subscriptions/payment", requirePharmacy, async (req, res): Promise
   res.json({ message: "تم تفعيل الاشتراك بنجاح", transactionId, plan: plan.name, expiresAt: endDate.toISOString() });
 });
 
-router.post("/subscriptions/cancel", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/subscriptions/cancel", requireApprovedPharmacy, async (req, res): Promise<void> => {
   await db.update(pharmaciesTable).set({
     isSubscribed: false, subscriptionPlan: null, subscriptionStartDate: null, subscriptionEndDate: null,
   }).where(eq(pharmaciesTable.id, req.session.pharmacyId!));

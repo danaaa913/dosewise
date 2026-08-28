@@ -218,7 +218,7 @@ export default function RegisterPage() {
         ...(licenseFile ? { licenseDoc: licenseFile } : {}),
       });
       await refresh();
-      navigate("/dashboard");
+      navigate("/account-status");
     } catch (err: any) {
       const msg = String(err?.message ?? "");
       if (/already registered/i.test(msg)) setServerError(e.emailTaken);

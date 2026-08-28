@@ -2,15 +2,11 @@ import { Router, type IRouter } from "express";
 import { db, medicinesTable, requestsTable } from "../db/index.js";
 import { sql, eq, and, gte, ne } from "drizzle-orm";
 import { AiChatBody } from "../zod/schemas.js";
+import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 
 const router: IRouter = Router();
 
-function requirePharmacy(req: any, res: any, next: any) {
-  if (!req.session.pharmacyId) { res.status(401).json({ error: "Authentication required" }); return; }
-  next();
-}
-
-router.get("/ai/medicines", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/ai/medicines", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const pharmacyId = req.session.pharmacyId!;
   const scope = typeof req.query.scope === "string" ? req.query.scope : "mine";
 
@@ -26,7 +22,7 @@ router.get("/ai/medicines", requirePharmacy, async (req, res): Promise<void> => 
   res.json({ medicines: rows.map(r => r.name) });
 });
 
-router.get("/ai/recommendations", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/ai/recommendations", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const pharmacyId = req.session.pharmacyId!;
 
   const topRequested = await db
@@ -68,7 +64,7 @@ router.get("/ai/recommendations", requirePharmacy, async (req, res): Promise<voi
   res.json({ recommendations });
 });
 
-router.get("/ai/medicine-suggestions", requirePharmacy, async (_req, res): Promise<void> => {
+router.get("/ai/medicine-suggestions", requireApprovedPharmacy, async (_req, res): Promise<void> => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
 
@@ -102,7 +98,7 @@ router.get("/ai/medicine-suggestions", requirePharmacy, async (_req, res): Promi
   res.json({ suggestions });
 });
 
-router.get("/ai/price-optimization", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/ai/price-optimization", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const pharmacyId = req.session.pharmacyId!;
   const focusMedicine = typeof req.query.medicine === "string" && req.query.medicine.trim() !== "" ? req.query.medicine : null;
 
@@ -138,7 +134,7 @@ router.get("/ai/price-optimization", requirePharmacy, async (req, res): Promise<
   res.json({ optimizations });
 });
 
-router.get("/ai/demand-forecast", requirePharmacy, async (req, res): Promise<void> => {
+router.get("/ai/demand-forecast", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const focusMedicine = typeof req.query.medicine === "string" && req.query.medicine.trim() !== "" ? req.query.medicine : null;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
@@ -176,7 +172,7 @@ const CHAT_RESPONSES: Record<string, string> = {
 };
 const CHAT_SUGGESTIONS = ["كيف أحسن إدارة مخزوني؟", "ما هي أفضل استراتيجية للتسعير؟", "كيف أزيد الطلب على أدويتي؟", "ما هي مزايا خطة الاشتراك السنوية؟"];
 
-router.post("/ai/chat", requirePharmacy, async (req, res): Promise<void> => {
+router.post("/ai/chat", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const parsed = AiChatBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { message } = parsed.data;
