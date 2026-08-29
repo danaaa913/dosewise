@@ -108,6 +108,13 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
       const [requester] = await tx.select().from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
       await tx.insert(notificationsTable).values({
         pharmacyId: row.pharmacyId,
+        type: "REQUEST_RECEIVED",
+        requestId: insertedRow.id,
+        metadata: {
+          medicineName: row.name,
+          requestedQuantity,
+          counterpartyName: requester?.name ?? "",
+        },
         message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${row.name} (الكمية: ${requestedQuantity})`,
       });
       return insertedRow;
@@ -133,6 +140,13 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
     if (violation.constraint === "requests_requester_idempotency_idx") {
       if (race && race.kind === "duplicate") { res.status(200).json(serializeRequest(race.row)); return; }
       fail(res, 409, "IDEMPOTENCY_KEY_REUSED", "Idempotency-Key was already used for a different request"); return;
+    }
+    if (violation.constraint === "notifications_pharmacy_request_type_idx") {
+      if (race) {
+        if (race.kind === "duplicate") { res.status(200).json(serializeRequest(race.row)); return; }
+        fail(res, 409, "IDEMPOTENCY_KEY_REUSED", "Idempotency-Key was already used for a different request"); return;
+      }
+      fail(res, 409, "DUPLICATE_PENDING_REQUEST", "A pending request for this medicine already exists"); return;
     }
     logger.error({ err, constraint: violation.constraint }, "requests/send: unexpected unique violation");
     fail(res, 500, undefined, "Internal server error");
@@ -262,6 +276,13 @@ router.post("/requests/:requestId/accept", requireApprovedPharmacy, async (req, 
       const [provider] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
       await tx.insert(notificationsTable).values({
         pharmacyId: request.requesterPharmacyId,
+        type: "REQUEST_ACCEPTED",
+        requestId: request.id,
+        metadata: {
+          medicineName: medicine.name,
+          requestedQuantity: request.requestedQuantity,
+          counterpartyName: provider?.name ?? "",
+        },
         message: `تم قبول طلبك للدواء: ${medicine.name} من صيدلية ${provider?.name ?? ""}`,
       });
 
@@ -312,6 +333,13 @@ router.post("/requests/:requestId/reject", requireApprovedPharmacy, async (req, 
       const [provider] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
       await tx.insert(notificationsTable).values({
         pharmacyId: request.requesterPharmacyId,
+        type: "REQUEST_REJECTED",
+        requestId: request.id,
+        metadata: {
+          medicineName: medicine?.name ?? "",
+          requestedQuantity: request.requestedQuantity,
+          counterpartyName: provider?.name ?? "",
+        },
         message: `تم رفض طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
       });
 
@@ -361,6 +389,13 @@ router.post("/requests/:requestId/cancel", requireApprovedPharmacy, async (req, 
       const [requester] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
       await tx.insert(notificationsTable).values({
         pharmacyId: request.providerPharmacyId,
+        type: "REQUEST_CANCELLED",
+        requestId: request.id,
+        metadata: {
+          medicineName: medicine?.name ?? "",
+          requestedQuantity: request.requestedQuantity,
+          counterpartyName: requester?.name ?? "",
+        },
         message: `ألغى ${requester?.name ?? "الطالب"} طلبه للدواء: ${medicine?.name ?? ""}`,
       });
 
@@ -406,8 +441,16 @@ router.post("/requests/:requestId/complete", requireApprovedPharmacy, async (req
       }
 
       const [medicine] = await tx.select({ name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, request.medicineId));
+      const [requester] = await tx.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, request.requesterPharmacyId));
       await tx.insert(notificationsTable).values({
         pharmacyId: request.providerPharmacyId,
+        type: "REQUEST_COMPLETED",
+        requestId: request.id,
+        metadata: {
+          medicineName: medicine?.name ?? "",
+          requestedQuantity: request.requestedQuantity,
+          counterpartyName: requester?.name ?? "",
+        },
         message: `أكدت الصيدلية الطالبة استلام الدواء: ${medicine?.name ?? ""} — اكتمل الطلب`,
       });
 

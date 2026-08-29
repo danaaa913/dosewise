@@ -144,6 +144,7 @@ export const ProcessPaymentBody = zod.object({
 
 export const GetNotificationsQueryParams = zod.object({
   unread_only: zod.coerce.boolean().optional(),
+  limit: zod.coerce.number().int().min(1).max(100).optional(),
 });
 
 export const MarkNotificationReadParams = zod.object({
