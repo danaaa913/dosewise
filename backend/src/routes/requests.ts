@@ -5,6 +5,7 @@ import { SendRequestBody, AcceptRequestParams, RejectRequestParams, RequestIdPar
 import { canTransition, fail, type RequestStatus } from "../lib/request-state.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 import { isExpired } from "../lib/expiry.js";
+import { logAudit } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -116,6 +117,15 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
           counterpartyName: requester?.name ?? "",
         },
         message: `طلب جديد من ${requester?.name ?? "صيدلية"} للدواء: ${row.name} (الكمية: ${requestedQuantity})`,
+      });
+      await logAudit(tx, {
+        actorType: "pharmacy",
+        actorId: req.session.pharmacyId!,
+        actorLabel: requester?.name ?? null,
+        action: "request.created",
+        targetType: "request",
+        targetId: insertedRow.id,
+        details: JSON.stringify({ medicineId, requestedQuantity }),
       });
       return insertedRow;
     });
@@ -285,6 +295,15 @@ router.post("/requests/:requestId/accept", requireApprovedPharmacy, async (req, 
         },
         message: `تم قبول طلبك للدواء: ${medicine.name} من صيدلية ${provider?.name ?? ""}`,
       });
+      await logAudit(tx, {
+        actorType: "pharmacy",
+        actorId: req.session.pharmacyId!,
+        actorLabel: provider?.name ?? null,
+        action: "request.accepted",
+        targetType: "request",
+        targetId: request.id,
+        details: JSON.stringify({ fromStatus: request.status, toStatus: "accepted" }),
+      });
 
       outcome = { status: 200, body: { message: "Request accepted", remainingStock: deducted[0].remaining } };
     });
@@ -342,6 +361,15 @@ router.post("/requests/:requestId/reject", requireApprovedPharmacy, async (req, 
         },
         message: `تم رفض طلبك للدواء: ${medicine?.name ?? ""} من صيدلية ${provider?.name ?? ""}`,
       });
+      await logAudit(tx, {
+        actorType: "pharmacy",
+        actorId: req.session.pharmacyId!,
+        actorLabel: provider?.name ?? null,
+        action: "request.rejected",
+        targetType: "request",
+        targetId: request.id,
+        details: JSON.stringify({ fromStatus: request.status, toStatus: "rejected" }),
+      });
 
       outcome = { status: 200, body: { message: "Request rejected" } };
     });
@@ -398,6 +426,15 @@ router.post("/requests/:requestId/cancel", requireApprovedPharmacy, async (req, 
         },
         message: `ألغى ${requester?.name ?? "الطالب"} طلبه للدواء: ${medicine?.name ?? ""}`,
       });
+      await logAudit(tx, {
+        actorType: "pharmacy",
+        actorId: req.session.pharmacyId!,
+        actorLabel: requester?.name ?? null,
+        action: "request.cancelled",
+        targetType: "request",
+        targetId: request.id,
+        details: JSON.stringify({ fromStatus: request.status, toStatus: "cancelled" }),
+      });
 
       outcome = { status: 200, body: { message: "Request cancelled" } };
     });
@@ -452,6 +489,15 @@ router.post("/requests/:requestId/complete", requireApprovedPharmacy, async (req
           counterpartyName: requester?.name ?? "",
         },
         message: `أكدت الصيدلية الطالبة استلام الدواء: ${medicine?.name ?? ""} — اكتمل الطلب`,
+      });
+      await logAudit(tx, {
+        actorType: "pharmacy",
+        actorId: req.session.pharmacyId!,
+        actorLabel: requester?.name ?? null,
+        action: "request.completed",
+        targetType: "request",
+        targetId: request.id,
+        details: JSON.stringify({ fromStatus: request.status, toStatus: "completed" }),
       });
 
       outcome = { status: 200, body: { message: "Request completed" } };
