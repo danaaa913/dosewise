@@ -1,6 +1,7 @@
 ﻿import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable, notificationsTable, auditLogsTable } from "../db/index.js";
+import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
+import { logAudit } from "../lib/audit.js";
 import { eq, count } from "drizzle-orm";
 import { AdminLoginBody, VerificationDecisionBody } from "../zod/schemas.js";
 import { loginLimiter } from "../lib/rate-limit.js";
@@ -97,7 +98,7 @@ router.post("/admin/pharmacies/:pharmacyId/verification", requireAdmin, async (r
     });
   }
 
-  await db.insert(auditLogsTable).values({
+  await logAudit(db, {
     actorType: "admin",
     actorId: adminId,
     actorLabel: admin?.email ?? null,
