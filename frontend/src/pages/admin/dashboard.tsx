@@ -1,7 +1,30 @@
-﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/layout";
 import { api, formatPrice } from "@/lib/api";
-import { useState } from "react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { useState, useEffect } from "react";
+
+const PAGE_SIZE = 20;
+
+function range(start: number, end: number): number[] {
+  const len = end - start + 1;
+  return Array.from({ length: len }, (_, i) => start + i);
+}
+
+function buildPageItems(current: number, totalPages: number): (number | "…")[] {
+  if (totalPages <= 7) return range(1, totalPages);
+  if (current <= 4) return [...range(1, 5), "…", totalPages];
+  if (current >= totalPages - 3) return [1, "…", ...range(totalPages - 4, totalPages)];
+  return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
+}
 
 const VERIFICATION_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: "قيد المراجعة", cls: "bg-amber-100 text-amber-700" },
@@ -11,6 +34,8 @@ const VERIFICATION_BADGES: Record<string, { label: string; cls: string }> = {
 
 export default function AdminDashboardPage() {
   const [tab, setTab] = useState<"overview" | "pharmacies" | "medicines">("overview");
+  const [pharmaciesPage, setPharmaciesPage] = useState(1);
+  const [medicinesPage, setMedicinesPage] = useState(1);
   const qc = useQueryClient();
   const [actionError, setActionError] = useState("");
 
@@ -36,8 +61,27 @@ export default function AdminDashboardPage() {
   };
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: api.admin.stats });
-  const { data: pharmacies } = useQuery({ queryKey: ["admin-pharmacies"], queryFn: api.admin.pharmacies });
-  const { data: medicines } = useQuery({ queryKey: ["admin-medicines"], queryFn: api.admin.medicines });
+  const { data: pharmacies } = useQuery({
+    queryKey: ["admin-pharmacies", pharmaciesPage],
+    queryFn: () => api.admin.pharmacies({ page: pharmaciesPage, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+  });
+  const { data: medicines } = useQuery({
+    queryKey: ["admin-medicines", medicinesPage],
+    queryFn: () => api.admin.medicines({ page: medicinesPage, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+  });
+
+  const pharmaciesTotalPages = Math.max(1, Math.ceil((pharmacies?.pagination.total ?? 0) / PAGE_SIZE));
+  const medicinesTotalPages = Math.max(1, Math.ceil((medicines?.pagination.total ?? 0) / PAGE_SIZE));
+
+  useEffect(() => {
+    if (pharmaciesPage > pharmaciesTotalPages) setPharmaciesPage(pharmaciesTotalPages);
+  }, [pharmaciesPage, pharmaciesTotalPages]);
+
+  useEffect(() => {
+    if (medicinesPage > medicinesTotalPages) setMedicinesPage(medicinesTotalPages);
+  }, [medicinesPage, medicinesTotalPages]);
 
   const statCards = [
     { label: "إجمالي الصيدليات", value: stats?.totalPharmacies ?? 0, color: "emerald" },
@@ -104,7 +148,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(pharmacies ?? []).map((p) => {
+              {(pharmacies?.data ?? []).map((p) => {
                 const badge = VERIFICATION_BADGES[p.verificationStatus] ?? VERIFICATION_BADGES.pending;
                 return (
                 <tr key={p.id} className="hover:bg-slate-50">
@@ -159,6 +203,52 @@ export default function AdminDashboardPage() {
             </tbody>
           </table>
           </div>
+          {(pharmacies?.pagination.total ?? 0) > PAGE_SIZE && (
+            <Pagination className="pt-2">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pharmaciesPage > 1) setPharmaciesPage(pharmaciesPage - 1);
+                    }}
+                    className={pharmaciesPage <= 1 ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+                {buildPageItems(pharmaciesPage, pharmaciesTotalPages).map((item, index) =>
+                  item === "…" ? (
+                    <PaginationItem key={`ellipsis-${index}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={item}>
+                      <PaginationLink
+                        href="#"
+                        isActive={item === pharmaciesPage}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setPharmaciesPage(item);
+                        }}
+                      >
+                        {item}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                )}
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pharmaciesPage < pharmaciesTotalPages) setPharmaciesPage(pharmaciesPage + 1);
+                    }}
+                    className={pharmaciesPage >= pharmaciesTotalPages ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
         </div>
       )}
 
@@ -174,7 +264,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(medicines ?? []).map((m) => (
+              {(medicines?.data ?? []).map((m) => (
                 <tr key={m.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
                   <td className="px-4 py-3 text-slate-600">{m.pharmacyName}</td>
@@ -193,6 +283,52 @@ export default function AdminDashboardPage() {
               ))}
             </tbody>
           </table>
+          {(medicines?.pagination.total ?? 0) > PAGE_SIZE && (
+            <Pagination className="pt-2">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (medicinesPage > 1) setMedicinesPage(medicinesPage - 1);
+                    }}
+                    className={medicinesPage <= 1 ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+                {buildPageItems(medicinesPage, medicinesTotalPages).map((item, index) =>
+                  item === "…" ? (
+                    <PaginationItem key={`ellipsis-${index}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={item}>
+                      <PaginationLink
+                        href="#"
+                        isActive={item === medicinesPage}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setMedicinesPage(item);
+                        }}
+                      >
+                        {item}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                )}
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (medicinesPage < medicinesTotalPages) setMedicinesPage(medicinesPage + 1);
+                    }}
+                    className={medicinesPage >= medicinesTotalPages ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
         </div>
       )}
     </AdminLayout>

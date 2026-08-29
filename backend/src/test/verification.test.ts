@@ -72,7 +72,9 @@ describe("AUTH-002/PHM-003: pharmacy verification flow", () => {
     const admin = await loginAdmin();
 
     const list = await admin.get("/api/admin/pharmacies");
-    const row = list.body.find((p: { email: string }) => p.email === email);
+    const total = list.body.pagination.total;
+    const lastPage = await admin.get(`/api/admin/pharmacies?page=${Math.ceil(total / 20)}&limit=20`);
+    const row = lastPage.body.data.find((p: { email: string }) => p.email === email);
     expect(row.verificationStatus).toBe("pending");
     expect(row.licenseNumber).toBe(`REG-${counter}`);
     expect(row.hasLicenseDoc).toBe(true);

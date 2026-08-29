@@ -15,6 +15,14 @@ function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
+function parseAdminListQuery(req: any): { page: number; limit: number } {
+  const page = Number.isFinite(Number(req.query.page)) ? Math.max(1, Math.floor(Number(req.query.page))) : 1;
+  const limit = Number.isFinite(Number(req.query.limit))
+    ? Math.min(100, Math.max(1, Math.floor(Number(req.query.limit))))
+    : 20;
+  return { page, limit };
+}
+
 router.post("/admin/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = AdminLoginBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -33,16 +41,26 @@ router.post("/admin/login", loginLimiter, async (req, res): Promise<void> => {
   res.json({ message: "Admin logged in", admin: { id: admin.id, email: admin.email } });
 });
 
-router.get("/admin/pharmacies", requireAdmin, async (_req, res): Promise<void> => {
-  const pharmacies = await db.select().from(pharmaciesTable).orderBy(pharmaciesTable.createdAt);
-  res.json(pharmacies.map(p => ({
-    id: p.id, name: p.name, managerName: p.managerName, email: p.email,
-    phone: p.phone, city: p.city, isActive: p.isActive, isSubscribed: p.isSubscribed,
-    verificationStatus: p.verificationStatus, rejectionReason: p.rejectionReason,
-    licenseNumber: p.licenseNumber, hasLicenseDoc: Boolean(p.licenseDocData),
-    licenseDocName: p.licenseDocName, licenseDocMime: p.licenseDocMime,
-    subscriptionPlan: p.subscriptionPlan ?? null, createdAt: p.createdAt.toISOString(),
-  })));
+router.get("/admin/pharmacies", requireAdmin, async (req, res): Promise<void> => {
+  const { page, limit } = parseAdminListQuery(req);
+
+  const [totalRow] = await db.select({ count: count() }).from(pharmaciesTable);
+  const pharmacies = await db.select().from(pharmaciesTable)
+    .orderBy(pharmaciesTable.createdAt)
+    .limit(limit)
+    .offset((page - 1) * limit);
+
+  res.json({
+    data: pharmacies.map(p => ({
+      id: p.id, name: p.name, managerName: p.managerName, email: p.email,
+      phone: p.phone, city: p.city, isActive: p.isActive, isSubscribed: p.isSubscribed,
+      verificationStatus: p.verificationStatus, rejectionReason: p.rejectionReason,
+      licenseNumber: p.licenseNumber, hasLicenseDoc: Boolean(p.licenseDocData),
+      licenseDocName: p.licenseDocName, licenseDocMime: p.licenseDocMime,
+      subscriptionPlan: p.subscriptionPlan ?? null, createdAt: p.createdAt.toISOString(),
+    })),
+    pagination: { page, limit, total: totalRow.count },
+  });
 });
 
 router.get("/admin/pharmacies/:pharmacyId/license-document", requireAdmin, async (req, res): Promise<void> => {
@@ -111,7 +129,10 @@ router.post("/admin/pharmacies/:pharmacyId/verification", requireAdmin, async (r
   res.json({ message: decision === "approve" ? "Pharmacy approved" : "Pharmacy rejected" });
 });
 
-router.get("/admin/medicines", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/admin/medicines", requireAdmin, async (req, res): Promise<void> => {
+  const { page, limit } = parseAdminListQuery(req);
+
+  const [totalRow] = await db.select({ count: count() }).from(medicinesTable);
   const medicines = await db
     .select({
       id: medicinesTable.id, pharmacyId: medicinesTable.pharmacyId,
@@ -121,11 +142,16 @@ router.get("/admin/medicines", requireAdmin, async (_req, res): Promise<void> =>
       pharmacyName: pharmaciesTable.name, pharmacyCity: pharmaciesTable.city,
     })
     .from(medicinesTable)
-    .leftJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id));
+    .leftJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
+    .limit(limit)
+    .offset((page - 1) * limit);
 
-  res.json(medicines.map(m => ({
-    ...m, pharmacyName: m.pharmacyName ?? "", pharmacyCity: m.pharmacyCity ?? "",
-  })));
+  res.json({
+    data: medicines.map(m => ({
+      ...m, pharmacyName: m.pharmacyName ?? "", pharmacyCity: m.pharmacyCity ?? "",
+    })),
+    pagination: { page, limit, total: totalRow.count },
+  });
 });
 
 router.get("/admin/stats", requireAdmin, async (_req, res): Promise<void> => {

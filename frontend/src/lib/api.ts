@@ -43,8 +43,14 @@ export const api = {
   admin: {
     login: (data: { email: string; password: string }) =>
       request("/admin/login", { method: "POST", body: JSON.stringify(data) }),
-    pharmacies: () => request<AdminPharmacy[]>("/admin/pharmacies"),
-    medicines: () => request<AdminMedicine[]>("/admin/medicines"),
+    pharmacies: (params?: PaginatedParams) => {
+      const qs = buildPaginationQuery(params);
+      return request<PaginatedResponse<AdminPharmacy>>(`/admin/pharmacies${qs}`);
+    },
+    medicines: (params?: PaginatedParams) => {
+      const qs = buildPaginationQuery(params);
+      return request<PaginatedResponse<AdminMedicine>>(`/admin/medicines${qs}`);
+    },
     stats: () => request<AdminStats>("/admin/stats"),
     licenseDocumentUrl: (pharmacyId: number) => `/api/admin/pharmacies/${pharmacyId}/license-document`,
     decideVerification: (pharmacyId: number, decision: "approve" | "reject", reason?: string) =>
@@ -196,15 +202,19 @@ export interface Medicine {
   isAvailable: boolean;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: { page: number; limit: number; total: number };
+}
+
+export type PaginatedParams = { page?: number; limit?: number };
+
 export interface AvailableMedicine extends Medicine {
   pharmacyName: string;
   pharmacyCity: string;
 }
 
-export interface AvailableMedicinesResponse {
-  data: AvailableMedicine[];
-  pagination: { page: number; limit: number; total: number };
-}
+export type AvailableMedicinesResponse = PaginatedResponse<AvailableMedicine>;
 
 export interface ExchangeRequest {
   id: number;
@@ -227,9 +237,7 @@ export type RequestListParams = {
   status?: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "expired";
 };
 
-export interface RequestListResponse {
-  data: ExchangeRequest[];
-  pagination: { page: number; limit: number; total: number };
+export interface RequestListResponse extends PaginatedResponse<ExchangeRequest> {
   pending: number;
 }
 
@@ -238,6 +246,14 @@ function buildRequestListQuery(params?: RequestListParams): string {
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function buildPaginationQuery(params?: PaginatedParams): string {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
   return qs ? `?${qs}` : "";
 }
