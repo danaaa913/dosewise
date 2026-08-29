@@ -31,11 +31,13 @@ In PostgreSQL:
 CREATE DATABASE dosewise;
 ```
 
-### 4. Push the database schema
+### 4. Apply database migrations (source of truth)
 
 ```bash
-pnpm db:push
+pnpm migrate
 ```
+
+Versioned Drizzle migrations in `backend/drizzle/` are the single source of truth for the database schema. They create all tables, enums, indexes and foreign keys from scratch. Each applied migration is recorded in the `__drizzle_migrations` tracker table inside the auto-created `drizzle` schema (`drizzle.__drizzle_migrations`); PostgreSQL-only, this is Drizzle's default. Migrations are journal-driven (versioned), not idempotent: do not mix manual schema edits or `db:push` with the migration history on the same database.
 
 ### 5. Seed with test data
 
@@ -74,8 +76,8 @@ Admin login is at: http://localhost:5173/admin
 | `pnpm dev` | Start both frontend and backend in dev mode |
 | `pnpm build` | Build both for production |
 | `pnpm seed` | Seed database with test data |
-| `pnpm db:push` | Push schema changes to the database |
-| `pnpm migrate` | Run idempotent migrations |
+| `pnpm db:push` | Development shortcut — push schema from code directly (not the migration path; avoid once migrations are applied) |
+| `pnpm migrate` | Apply versioned Drizzle migrations (source of truth; tracked in `drizzle.__drizzle_migrations`) |
 
 ## Stack
 

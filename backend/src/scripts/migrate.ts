@@ -9,7 +9,9 @@ const migrationsFolder = resolve(here, "../../drizzle");
 
 async function main() {
   console.log("Running versioned DoseWise migrations...");
-  await migrate(db, { migrationsFolder });
+  // Tracker table lives in the auto-created "drizzle" schema (Drizzle's PostgreSQL default).
+  // Pinned explicitly so intent is clear and the behavior survives future defaults changes.
+  await migrate(db, { migrationsFolder, migrationsSchema: "drizzle" });
   console.log("Migrations complete.");
 }
 
