@@ -191,6 +191,7 @@ export interface ExchangeRequest {
   providerPharmacyId: number;
   medicineId: number;
   requestedQuantity: number;
+  unitPrice: string;
   status: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "expired";
   requestDate: string;
   responseDate: string | null;

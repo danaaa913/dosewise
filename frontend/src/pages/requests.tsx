@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox, Send } from "lucide-react";
 import { Layout } from "@/components/layout";
@@ -6,232 +6,451 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { api, type ExchangeRequest } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
+import type { Translations } from "@/i18n/translations";
+import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
-const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  pending: { label: "معلق", cls: "bg-amber-100 text-amber-700" },
-  accepted: { label: "مقبول", cls: "bg-emerald-100 text-emerald-700" },
-  rejected: { label: "مرفوض", cls: "bg-red-100 text-red-600" },
-  cancelled: { label: "ملغى", cls: "bg-slate-200 text-slate-600" },
-  completed: { label: "مكتمل", cls: "bg-blue-100 text-blue-700" },
-  expired: { label: "منتهي", cls: "bg-slate-200 text-slate-500" },
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+type TabKey = "received" | "sent";
+
+type AllowableStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "cancelled"
+  | "completed"
+  | "expired";
+
+type ConfirmAction = "accept" | "reject" | "cancel" | "complete";
+
+const STATUS_META: Record<AllowableStatus, { key: AllowableStatus; cls: string }> = {
+  pending: { key: "pending", cls: "bg-amber-100 text-amber-700" },
+  accepted: { key: "accepted", cls: "bg-emerald-100 text-emerald-700" },
+  rejected: { key: "rejected", cls: "bg-red-100 text-red-600" },
+  cancelled: { key: "cancelled", cls: "bg-slate-200 text-slate-600" },
+  completed: { key: "completed", cls: "bg-blue-100 text-blue-700" },
+  expired: { key: "expired", cls: "bg-slate-200 text-slate-500" },
 };
+
+const FALLBACK_STATUS: { key: AllowableStatus; cls: string } = {
+  key: "expired",
+  cls: "bg-slate-200 text-slate-500",
+};
+
+function requestErrorMessage(t: Translations, error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  const known: Record<string, string> = {
+    REQUEST_NOT_FOUND: t.errorCodes.REQUEST_NOT_FOUND,
+    REQUEST_FORBIDDEN: t.errorCodes.REQUEST_FORBIDDEN,
+    REQUESTER_UNAVAILABLE: t.errorCodes.REQUESTER_UNAVAILABLE,
+    REQUEST_INVALID_STATE: t.errorCodes.REQUEST_INVALID_STATE,
+    MEDICINE_NOT_FOUND: t.errorCodes.MEDICINE_NOT_FOUND,
+    MEDICINE_UNAVAILABLE: t.errorCodes.MEDICINE_UNAVAILABLE,
+    MEDICINE_EXPIRED: t.errorCodes.MEDICINE_EXPIRED,
+    INSUFFICIENT_STOCK: t.errorCodes.INSUFFICIENT_STOCK,
+  };
+  if (code && known[code]) return known[code];
+  const message = error instanceof Error ? error.message : "";
+  if (/failed to fetch|network/i.test(message)) return t.requests.errors.network;
+  return t.requests.errors.generic;
+}
 
 export default function RequestsPage() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"received" | "sent">("received");
-  const [feedback, setFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
+  const numberFmt = new Intl.NumberFormat(locale);
+  const priceFmt = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
 
-  const showFeedback = (text: string, isError = false) => {
-    setFeedback({ text, isError });
-    setTimeout(() => setFeedback(null), 3000);
+  const [tab, setTab] = useState<TabKey>("received");
+  const [confirmTarget, setConfirmTarget] = useState<{
+    action: ConfirmAction;
+    request: ExchangeRequest;
+  } | null>(null);
+
+  const receivedTabRef = useRef<HTMLButtonElement | null>(null);
+  const sentTabRef = useRef<HTMLButtonElement | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const actionJustSucceeded = useRef(false);
+
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    if (actionJustSucceeded.current) {
+      actionJustSucceeded.current = false;
+      (tab === "received" ? receivedTabRef.current : sentTabRef.current)?.focus();
+    } else if (openerRef.current) {
+      openerRef.current.focus();
+    }
   };
 
   const { data: received, isLoading: loadingReceived, isError: errReceived, refetch: refetchReceived } = useQuery({
     queryKey: ["requests-received"],
     queryFn: api.requests.received,
+    refetchInterval: 15_000,
   });
 
   const { data: sent, isLoading: loadingSent, isError: errSent, refetch: refetchSent } = useQuery({
     queryKey: ["requests-sent"],
     queryFn: api.requests.sent,
+    refetchInterval: 30_000,
   });
 
   const acceptMut = useMutation({
     mutationFn: (id: number) => api.requests.accept(id),
     onSuccess: () => {
+      actionJustSucceeded.current = true;
       qc.invalidateQueries({ queryKey: ["requests-received"] });
-      showFeedback("تم قبول الطلب بنجاح");
+      qc.invalidateQueries({ queryKey: ["notifications-count"] });
+      setConfirmTarget(null);
+      toast({ title: t.requests.success.accepted });
     },
-    onError: (e: Error) => showFeedback(e.message, true),
+    onError: (error: unknown) => {
+      setConfirmTarget(null);
+      toast({ variant: "destructive", title: requestErrorMessage(t, error) });
+    },
   });
 
   const rejectMut = useMutation({
     mutationFn: (id: number) => api.requests.reject(id),
     onSuccess: () => {
+      actionJustSucceeded.current = true;
       qc.invalidateQueries({ queryKey: ["requests-received"] });
-      showFeedback("تم رفض الطلب");
+      qc.invalidateQueries({ queryKey: ["notifications-count"] });
+      setConfirmTarget(null);
+      toast({ title: t.requests.success.rejected });
     },
-    onError: (e: Error) => showFeedback(e.message, true),
+    onError: (error: unknown) => {
+      setConfirmTarget(null);
+      toast({ variant: "destructive", title: requestErrorMessage(t, error) });
+    },
   });
 
   const cancelMut = useMutation({
     mutationFn: (id: number) => api.requests.cancel(id),
     onSuccess: () => {
+      actionJustSucceeded.current = true;
       qc.invalidateQueries({ queryKey: ["requests-sent"] });
-      qc.invalidateQueries({ queryKey: ["requests-received"] });
-      showFeedback("تم إلغاء الطلب");
+      qc.invalidateQueries({ queryKey: ["notifications-count"] });
+      setConfirmTarget(null);
+      toast({ title: t.requests.success.cancelled });
     },
-    onError: (e: Error) => showFeedback(e.message, true),
+    onError: (error: unknown) => {
+      setConfirmTarget(null);
+      toast({ variant: "destructive", title: requestErrorMessage(t, error) });
+    },
   });
 
   const completeMut = useMutation({
     mutationFn: (id: number) => api.requests.complete(id),
     onSuccess: () => {
+      actionJustSucceeded.current = true;
       qc.invalidateQueries({ queryKey: ["requests-sent"] });
-      qc.invalidateQueries({ queryKey: ["requests-received"] });
-      showFeedback("تم تأكيد الاستلام — اكتمل الطلب 🎉");
+      qc.invalidateQueries({ queryKey: ["notifications-count"] });
+      setConfirmTarget(null);
+      toast({ title: t.requests.success.completed });
     },
-    onError: (e: Error) => showFeedback(e.message, true),
+    onError: (error: unknown) => {
+      setConfirmTarget(null);
+      toast({ variant: "destructive", title: requestErrorMessage(t, error) });
+    },
   });
 
-  const requests: ExchangeRequest[] = tab === "received" ? (received ?? []) : (sent ?? []);
-  const isLoading = tab === "received" ? loadingReceived : loadingSent;
+  const actionPending =
+    acceptMut.isPending || rejectMut.isPending || cancelMut.isPending || completeMut.isPending;
+
+  const openConfirm = (action: ConfirmAction, request: ExchangeRequest, opener: HTMLButtonElement) => {
+    openerRef.current = opener;
+    setConfirmTarget({ action, request });
+  };
+
+  const runAction = (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!confirmTarget) return;
+    const id = confirmTarget.request.id;
+    switch (confirmTarget.action) {
+      case "accept":
+        acceptMut.mutate(id);
+        break;
+      case "reject":
+        rejectMut.mutate(id);
+        break;
+      case "cancel":
+        cancelMut.mutate(id);
+        break;
+      case "complete":
+        completeMut.mutate(id);
+        break;
+    }
+  };
+
+  const dialogLabels = (() => {
+    if (!confirmTarget) return null;
+    const { action, request } = confirmTarget;
+    const desc = t.requests.dialogs[`${action}Desc`]
+      .replace("{medicine}", request.medicineName)
+      .replace("{qty}", numberFmt.format(request.requestedQuantity));
+    return {
+      title: t.requests.dialogs[`${action}Title`],
+      desc,
+      confirm: t.requests.actions[action],
+      cancelLabel: action === "cancel" ? t.requests.dialogs.back : t.requests.dialogs.cancel,
+      isDestructive: action === "reject" || action === "cancel",
+      isAccept: action === "accept",
+    };
+  })();
 
   const pendingCount = received?.filter((r) => r.status === "pending").length ?? 0;
 
-  return (
-    <Layout title="الطلبات">
-      {feedback && (
-        <div
-          className={`mb-4 p-3 border rounded-lg text-sm ${
-            feedback.isError
-              ? "bg-red-50 border-red-200 text-red-700"
-              : "bg-emerald-50 border-emerald-200 text-emerald-700"
-          }`}
-        >
-          {feedback.text}
-        </div>
-      )}
+  const renderRequests = (panel: TabKey) => {
+    const loading = panel === "received" ? loadingReceived : loadingSent;
+    const error = panel === "received" ? errReceived : errSent;
+    const refetch = panel === "received" ? refetchReceived : refetchSent;
+    const list: ExchangeRequest[] = panel === "received" ? (received ?? []) : (sent ?? []);
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setTab("received")}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors relative ${
-            tab === "received" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          الطلبات الواردة
-          {pendingCount > 0 && (
-            <span className="mr-1.5 text-xs bg-amber-500 text-white rounded-full px-1.5 py-0.5">
-              {pendingCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setTab("sent")}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === "sent" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          الطلبات المُرسلة
-        </button>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-3">
+    if (loading) {
+      return (
+        <div aria-hidden="true" className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-              <div className="flex gap-2"><Skeleton className="h-5 w-16 rounded-full" /><Skeleton className="h-3 w-24" /></div>
+              <div className="flex gap-2">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-3 w-24" />
+              </div>
               <Skeleton className="h-4 w-40" />
-              <div className="grid grid-cols-3 gap-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /></div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-full" />
+              </div>
             </div>
           ))}
         </div>
-      ) : (tab === "received" ? errReceived : errSent) ? (
-        <Alert variant="destructive">
+      );
+    }
+
+    if (error) {
+      return (
+        <Alert variant="destructive" role="alert">
           <p>{t.errors.query}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => tab === "received" ? refetchReceived() : refetchSent()}>{t.errors.retry}</Button>
+          <Button variant="outline" size="sm" className={cn("mt-2", FOCUS_RING)} onClick={() => refetch()}>
+            {t.errors.retry}
+          </Button>
         </Alert>
-      ) : !requests.length ? (
+      );
+    }
+
+    if (!list.length) {
+      return (
         <Empty>
           <EmptyMedia variant="icon">
-            {tab === "received" ? <Inbox className="size-6" /> : <Send className="size-6" />}
+            {panel === "received" ? <Inbox className="size-6" /> : <Send className="size-6" />}
           </EmptyMedia>
           <EmptyTitle>
-            {tab === "received" ? t.empty.requestsReceived : t.empty.requestsSent}
+            {panel === "received" ? t.empty.requestsReceived : t.empty.requestsSent}
           </EmptyTitle>
         </Empty>
-      ) : (
-        <div className="space-y-3">
-          {requests.map((req) => {
-            const s = STATUS_LABELS[req.status] ?? { label: req.status, cls: "bg-slate-100 text-slate-600" };
-            return (
-              <div key={req.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${s.cls}`}>
-                        {s.label}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        #{req.id} — {new Date(req.requestDate).toLocaleDateString("ar-JO")}
-                      </span>
-                    </div>
-                    <h4 className="font-semibold text-slate-800 text-sm">{req.medicineName}</h4>
-                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs text-slate-500">
-                      <span>
-                        <span className="text-slate-600 font-medium">الطالب: </span>
-                        {req.requesterName}
-                      </span>
-                      <span>
-                        <span className="text-slate-600 font-medium">المزود: </span>
-                        {req.providerName}
-                      </span>
-                      <span>
-                        <span className="text-slate-600 font-medium">الكمية المطلوبة: </span>
-                        {req.requestedQuantity}
-                      </span>
-                    </div>
-                    {req.responseDate && (
-                      <p className="text-xs text-slate-400 mt-1">
-                        تاريخ الرد: {new Date(req.responseDate).toLocaleDateString("ar-JO")}
-                      </p>
-                    )}
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {list.map((req) => {
+          const statusMeta = STATUS_META[req.status] ?? FALLBACK_STATUS;
+          const total = Number(req.unitPrice) * req.requestedQuantity;
+          return (
+            <div key={req.id} className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusMeta.cls}`}>
+                      {t.requests.status[statusMeta.key]}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      #{req.id} — {dateFmt.format(new Date(req.requestDate))}
+                    </span>
                   </div>
-
-                  {/* Actions for received pending */}
-                  {tab === "received" && req.status === "pending" && (
-                    <div className="flex gap-2 mr-4 flex-shrink-0">
-                      <button
-                        onClick={() => acceptMut.mutate(req.id)}
-                        disabled={acceptMut.isPending || rejectMut.isPending}
-                        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
-                      >
-                        قبول
-                      </button>
-                      <button
-                        onClick={() => rejectMut.mutate(req.id)}
-                        disabled={acceptMut.isPending || rejectMut.isPending}
-                        className="border border-red-300 text-red-600 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-60 transition-colors"
-                      >
-                        رفض
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Actions for sent requests */}
-                  {tab === "sent" && req.status === "pending" && (
-                    <div className="flex gap-2 mr-4 flex-shrink-0">
-                      <button
-                        onClick={() => cancelMut.mutate(req.id)}
-                        disabled={cancelMut.isPending}
-                        className="border border-slate-300 text-slate-600 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
-                      >
-                        إلغاء الطلب
-                      </button>
-                    </div>
-                  )}
-                  {tab === "sent" && req.status === "accepted" && (
-                    <div className="flex gap-2 mr-4 flex-shrink-0">
-                      <button
-                        onClick={() => completeMut.mutate(req.id)}
-                        disabled={completeMut.isPending}
-                        className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
-                      >
-                        تأكيد الاستلام
-                      </button>
-                    </div>
+                  <h4 className="mt-1 font-semibold text-slate-800 text-sm break-words">
+                    {req.medicineName}
+                  </h4>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs text-slate-500">
+                    <span className="min-w-0">
+                      <span className="text-slate-600 font-medium">{t.requests.fields.requester}: </span>
+                      <span className="break-words">{req.requesterName}</span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-slate-600 font-medium">{t.requests.fields.provider}: </span>
+                      <span className="break-words">{req.providerName}</span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-slate-600 font-medium">{t.requests.fields.quantity}: </span>
+                      {numberFmt.format(req.requestedQuantity)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-slate-600 font-medium">{t.requests.fields.unitPrice}: </span>
+                      {priceFmt.format(Number(req.unitPrice))} {t.browse.jod}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-slate-600 font-medium">{t.requests.fields.total}: </span>
+                      {priceFmt.format(total)} {t.browse.jod}
+                    </span>
+                  </div>
+                  {req.responseDate && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      {t.requests.fields.responseDate}: {dateFmt.format(new Date(req.responseDate))}
+                    </p>
                   )}
                 </div>
+
+                {panel === "received" && req.status === "pending" && (
+                  <div className="flex flex-wrap gap-2 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      className={cn("min-h-11 bg-emerald-600 text-white hover:bg-emerald-700", FOCUS_RING)}
+                      disabled={actionPending}
+                      aria-label={t.requests.actions.acceptAria.replace("{medicine}", req.medicineName)}
+                      onClick={(e) => openConfirm("accept", req, e.currentTarget)}
+                    >
+                      {t.requests.actions.accept}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn("min-h-11 border-red-300 text-red-600 hover:bg-red-50", FOCUS_RING)}
+                      disabled={actionPending}
+                      aria-label={t.requests.actions.rejectAria.replace("{medicine}", req.medicineName)}
+                      onClick={(e) => openConfirm("reject", req, e.currentTarget)}
+                    >
+                      {t.requests.actions.reject}
+                    </Button>
+                  </div>
+                )}
+
+                {panel === "sent" && req.status === "pending" && (
+                  <div className="flex flex-wrap gap-2 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn("min-h-11 text-slate-600", FOCUS_RING)}
+                      disabled={actionPending}
+                      aria-label={t.requests.actions.cancelAria.replace("{medicine}", req.medicineName)}
+                      onClick={(e) => openConfirm("cancel", req, e.currentTarget)}
+                    >
+                      {t.requests.actions.cancel}
+                    </Button>
+                  </div>
+                )}
+
+                {panel === "sent" && req.status === "accepted" && (
+                  <div className="flex flex-wrap gap-2 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      className={cn("min-h-11 bg-blue-600 text-white hover:bg-blue-700", FOCUS_RING)}
+                      disabled={actionPending}
+                      aria-label={t.requests.actions.completeAria.replace("{medicine}", req.medicineName)}
+                      onClick={(e) => openConfirm("complete", req, e.currentTarget)}
+                    >
+                      {t.requests.actions.complete}
+                    </Button>
+                  </div>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <Layout title={t.nav.requests}>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as TabKey)}
+      >
+        <TabsList className="mb-6 h-auto min-h-11 gap-1 rounded-lg bg-slate-100 p-1">
+          <TabsTrigger
+            ref={receivedTabRef}
+            value="received"
+            className="min-h-11 gap-2 rounded-md px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-800 data-[state=active]:shadow-sm"
+          >
+            {t.requests.tabs.received}
+            {pendingCount > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-semibold text-white">
+                {numberFmt.format(pendingCount)}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger
+            ref={sentTabRef}
+            value="sent"
+            className="min-h-11 rounded-md px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-800 data-[state=active]:shadow-sm"
+          >
+            {t.requests.tabs.sent}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="received">{renderRequests("received")}</TabsContent>
+        <TabsContent value="sent">{renderRequests("sent")}</TabsContent>
+      </Tabs>
+
+      <AlertDialog
+        open={!!confirmTarget}
+        onOpenChange={(open) => {
+          if (!open && !actionPending) setConfirmTarget(null);
+        }}
+      >
+        <AlertDialogContent aria-modal="true" onCloseAutoFocus={restoreFocus}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{dialogLabels?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{dialogLabels?.desc}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setConfirmTarget(null)}
+              disabled={actionPending}
+            >
+              {dialogLabels?.cancelLabel}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={runAction}
+              disabled={actionPending}
+              className={cn(
+                dialogLabels?.isDestructive
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : dialogLabels?.isAccept
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+              )}
+            >
+              {actionPending ? t.requests.processing : dialogLabels?.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
