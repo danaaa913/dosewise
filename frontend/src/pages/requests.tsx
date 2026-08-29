@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Inbox, Send } from "lucide-react";
 import { Layout } from "@/components/layout";
@@ -43,6 +43,14 @@ type AllowableStatus =
 
 type ConfirmAction = "accept" | "reject" | "cancel" | "complete";
 
+function parseTabFromUrl(): TabKey {
+  if (typeof window === "undefined") return "received";
+  const params = new URLSearchParams(window.location.search);
+  const tabParam = params.get("tab");
+  if (tabParam === "sent") return "sent";
+  return "received";
+}
+
 const STATUS_META: Record<AllowableStatus, { key: AllowableStatus; cls: string }> = {
   pending: { key: "pending", cls: "bg-amber-100 text-amber-700" },
   accepted: { key: "accepted", cls: "bg-emerald-100 text-emerald-700" },
@@ -86,7 +94,23 @@ export default function RequestsPage() {
   });
   const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
 
-  const [tab, setTab] = useState<TabKey>("received");
+  const [tab, setTab] = useState<TabKey>(parseTabFromUrl);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setTab(parseTabFromUrl());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const handleTabChange = (newTab: TabKey) => {
+    if (newTab === tab) return;
+    setTab(newTab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", newTab);
+    window.history.pushState({}, "", url.toString());
+  };
   const [confirmTarget, setConfirmTarget] = useState<{
     action: ConfirmAction;
     request: ExchangeRequest;
@@ -389,7 +413,7 @@ export default function RequestsPage() {
     <Layout title={t.nav.requests}>
       <Tabs
         value={tab}
-        onValueChange={(value) => setTab(value as TabKey)}
+        onValueChange={(value) => handleTabChange(value as TabKey)}
       >
         <TabsList className="mb-6 h-auto min-h-11 gap-1 rounded-lg bg-slate-100 p-1">
           <TabsTrigger
