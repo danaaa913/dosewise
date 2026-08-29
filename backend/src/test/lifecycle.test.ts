@@ -110,7 +110,8 @@ describe("EXC-008: requester cancels a pending request", () => {
 
     await provider.agent.post(`/api/requests/${send.body.id}/accept`).expect(200);
     const cancel = await requester.agent.post(`/api/requests/${send.body.id}/cancel`);
-    expect(cancel.status).toBe(400);
+    expect(cancel.status).toBe(409);
+    expect(cancel.body.code).toBe("REQUEST_INVALID_STATE");
     expect(cancel.body.error).toContain("accepted");
   });
 });
@@ -123,7 +124,8 @@ describe("EXC-014: requester completes an accepted request", () => {
     const send = await sendRequest(requester.agent, medicine.id);
 
     const res = await requester.agent.post(`/api/requests/${send.body.id}/complete`);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REQUEST_INVALID_STATE");
     expect(res.body.error).toContain("pending");
   });
 
@@ -156,7 +158,8 @@ describe("EXC-014: requester completes an accepted request", () => {
     await provider.agent.post(`/api/requests/${send.body.id}/accept`).expect(200);
     await requester.agent.post(`/api/requests/${send.body.id}/complete`).expect(200);
     const again = await requester.agent.post(`/api/requests/${send.body.id}/complete`);
-    expect(again.status).toBe(400);
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe("REQUEST_INVALID_STATE");
   });
 
   it("only the requester may confirm receipt", async () => {

@@ -4,6 +4,8 @@ import { eq, and, asc, gt, gte, ne } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 import { todayUtc } from "../lib/expiry.js";
+import { fail } from "../lib/request-state.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -109,7 +111,19 @@ router.delete("/medicines/:medicineId/delete", requireApprovedPharmacy, async (r
   if (!existing) { res.status(404).json({ error: "Medicine not found" }); return; }
   if (existing.pharmacyId !== req.session.pharmacyId) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  await db.delete(medicinesTable).where(eq(medicinesTable.id, params.data.medicineId));
+  try {
+    await db.delete(medicinesTable).where(eq(medicinesTable.id, params.data.medicineId));
+  } catch (err) {
+    const underlying = (err as { cause?: { code?: string; constraint?: string } }).cause ?? err;
+    const violation = underlying as { code?: string; constraint?: string };
+    if (violation.code === "23503" && violation.constraint === "requests_medicine_id_medicines_id_fk") {
+      fail(res, 409, "MEDICINE_HAS_REQUESTS", "This medicine has requests and cannot be deleted");
+      return;
+    }
+    logger.error({ err }, "medicines/delete: unexpected database error");
+    fail(res, 500, undefined, "Internal server error");
+    return;
+  }
   res.json({ message: "Medicine deleted successfully" });
 });
 

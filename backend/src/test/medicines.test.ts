@@ -1,13 +1,14 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import app from "../app.js";
-import { db, pharmaciesTable, medicinesTable } from "../db/index.js";
+import { db, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
 
 const stamp = Date.now();
 let counter = 0;
 const createdPharmacyEmails: string[] = [];
 const createdMedicineIds: number[] = [];
+const createdRequestIds: number[] = [];
 
 async function registerPharmacy() {
   counter += 1;
@@ -47,12 +48,16 @@ async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: 
 }
 
 afterAll(async () => {
+  if (createdRequestIds.length > 0) {
+    await db.delete(requestsTable).where(inArray(requestsTable.id, createdRequestIds));
+  }
   if (createdMedicineIds.length > 0) {
     await db.delete(medicinesTable).where(inArray(medicinesTable.id, createdMedicineIds));
   }
   for (const email of createdPharmacyEmails) {
     const [pharmacy] = await db.select({ id: pharmaciesTable.id }).from(pharmaciesTable).where(eq(pharmaciesTable.email, email));
     if (pharmacy) {
+      await db.delete(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacy.id));
       await db.delete(pharmaciesTable).where(eq(pharmaciesTable.id, pharmacy.id));
     }
   }
@@ -466,5 +471,82 @@ describe("SORT-001: deterministic marketplace ordering", () => {
     expect(ids).not.toContain(expired.id);
     expect(ids).not.toContain(empty.id);
     expect(ids).not.toContain(own.id);
+  });
+});
+
+describe("D1-DELETE: deleting a medicine that has requests", () => {
+  async function sendPendingRequest(provider: { agent: request.Agent }, requester: { agent: request.Agent }, medicineId: number, key: string) {
+    const send = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", key)
+      .send({ medicineId, requestedQuantity: 1 });
+    expect(send.status).toBe(201);
+    createdRequestIds.push(send.body.id);
+    return send.body.id as number;
+  }
+
+  it("deletes a medicine that has never been requested", async () => {
+    const owner = await registerPharmacy();
+    const medicine = await addMedicine(owner.agent, { quantity: 5 });
+
+    const res = await owner.agent.delete(`/api/medicines/${medicine.id}/delete`);
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("returns 409 MEDICINE_HAS_REQUESTS while a pending request exists, as JSON not HTML", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    await sendPendingRequest(provider, requester, medicine.id, `${stamp}-del-pending`);
+
+    const res = await provider.agent.delete(`/api/medicines/${medicine.id}/delete`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("MEDICINE_HAS_REQUESTS");
+    expect(res.headers["content-type"]).toContain("application/json");
+
+    const meds = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(meds).toHaveLength(1);
+    expect(meds[0].quantity).toBe(5);
+    const reqs = await db.select().from(requestsTable).where(and(eq(requestsTable.medicineId, medicine.id), eq(requestsTable.status, "pending")));
+    expect(reqs).toHaveLength(1);
+  });
+
+  it.each([
+    ["accepted"],
+    ["rejected"],
+    ["cancelled"],
+    ["completed"],
+  ])("returns 409 MEDICINE_HAS_REQUESTS while a %s request still references the medicine", async (status) => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const requestId = await sendPendingRequest(provider, requester, medicine.id, `${stamp}-del-${status}`);
+
+    if (status === "accepted") {
+      const accept = await provider.agent.post(`/api/requests/${requestId}/accept`);
+      expect(accept.status).toBe(200);
+    } else if (status === "rejected") {
+      const reject = await provider.agent.post(`/api/requests/${requestId}/reject`);
+      expect(reject.status).toBe(200);
+    } else if (status === "cancelled") {
+      const cancel = await requester.agent.post(`/api/requests/${requestId}/cancel`);
+      expect(cancel.status).toBe(200);
+    } else if (status === "completed") {
+      const accept = await provider.agent.post(`/api/requests/${requestId}/accept`);
+      expect(accept.status).toBe(200);
+      const complete = await requester.agent.post(`/api/requests/${requestId}/complete`);
+      expect(complete.status).toBe(200);
+    }
+
+    const res = await provider.agent.delete(`/api/medicines/${medicine.id}/delete`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("MEDICINE_HAS_REQUESTS");
+    expect(res.headers["content-type"]).toContain("application/json");
+
+    const meds = await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(meds).toHaveLength(1);
+    const [row] = await db.select({ status: requestsTable.status }).from(requestsTable).where(eq(requestsTable.id, requestId));
+    expect(row.status).toBe(status);
   });
 });

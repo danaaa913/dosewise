@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect, afterAll, afterEach, vi } from "vitest";
 import request from "supertest";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import app from "../app.js";
 import { db, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
 
@@ -117,10 +117,11 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { quantity: 5 });
 
-    const res = await sendRequest(requester.agent, medicine.id, 6);
+const res = await sendRequest(requester.agent, medicine.id, 6);
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain("exceeds");
+expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STOCK");
+    expect(res.body.error).toContain("Insufficient stock");
   });
 
   it("rejects requests for expired medicines", async () => {
@@ -128,9 +129,10 @@ describe("EXC-001: requested quantity must be >=1 and within stock", () => {
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent, { expiryDate: "2020-01-01" });
 
-    const res = await sendRequest(requester.agent, medicine.id, 1);
+const res = await sendRequest(requester.agent, medicine.id, 1);
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("MEDICINE_EXPIRED");
     expect(res.body.error).toContain("expired");
   });
 
@@ -175,8 +177,9 @@ describe("EXC-006/EXC-007: atomic acceptance with stock deduction", () => {
     await provider.agent.post(`/api/requests/${send.body.id}/accept`);
     expect((await db.select().from(medicinesTable).where(eq(medicinesTable.id, medicine.id)))[0].quantity).toBe(0);
 
-    const lateSend = await sendRequest(requester.agent, medicine.id, 5);
-    expect(lateSend.status).toBe(400);
+const lateSend = await sendRequest(requester.agent, medicine.id, 5);
+    expect(lateSend.status).toBe(409);
+    expect(lateSend.body.code).toBe("INSUFFICIENT_STOCK");
   });
 
   it("EXC-007: concurrent accepts on the last unit â€” exactly one succeeds", async () => {
@@ -219,12 +222,14 @@ describe("EXC-004: status transitions follow the state machine", () => {
     const accept = await provider.agent.post(`/api/requests/${requestId}/accept`);
     expect(accept.status).toBe(200);
 
-    const again = await provider.agent.post(`/api/requests/${requestId}/accept`);
-    expect(again.status).toBe(400);
+const again = await provider.agent.post(`/api/requests/${requestId}/accept`);
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe("REQUEST_INVALID_STATE");
     expect(again.body.error).toContain("accepted");
 
     const rejectAfterAccept = await provider.agent.post(`/api/requests/${requestId}/reject`);
-    expect(rejectAfterAccept.status).toBe(400);
+    expect(rejectAfterAccept.status).toBe(409);
+    expect(rejectAfterAccept.body.code).toBe("REQUEST_INVALID_STATE");
   });
 
   it("only the provider may accept", async () => {
@@ -385,7 +390,7 @@ describe("EXP-003: send expiry boundary — expiring today is acceptable", () =>
     const medicine = await addMedicine(provider.agent, { quantity: 5, expiryDate: yesterday });
 
     const res = await sendRequest(requester.agent, medicine.id, 1);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(res.body.code).toBe("MEDICINE_EXPIRED");
   });
 
@@ -594,23 +599,25 @@ describe("EXC-014: unexpected database errors return a generic 500 without leaki
     vi.restoreAllMocks();
   });
 
-  it("a non-unique database error is not leaked to the client", async () => {
+  it("a database failure inside the send transaction is not leaked and leaves no request", async () => {
     const provider = await registerPharmacy();
     const requester = await registerPharmacy();
     const medicine = await addMedicine(provider.agent);
 
     keyCounter += 1;
-    vi.spyOn(db, "insert").mockImplementationOnce(() => {
-      throw new Error("boom");
-    });
+    const sharedKey = `${stamp}-exc14a-${keyCounter}`;
+    vi.spyOn(db, "transaction").mockRejectedValueOnce(new Error("boom"));
     const res = await requester.agent.post("/api/requests/send")
-      .set("Idempotency-Key", `${stamp}-exc14a-${keyCounter}`)
+      .set("Idempotency-Key", sharedKey)
       .send({ medicineId: medicine.id, requestedQuantity: 1 });
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Internal server error" });
     expect(res.text).not.toContain("boom");
     expect(res.text).not.toContain("Failed query");
+
+    const rows = await db.select().from(requestsTable).where(eq(requestsTable.idempotencyKey, sharedKey));
+    expect(rows).toHaveLength(0);
   });
 
   it("a unique violation with an unknown constraint stays generic (no constraint name leaked)", async () => {
@@ -621,9 +628,7 @@ describe("EXC-014: unexpected database errors return a generic 500 without leaki
     keyCounter += 1;
     const drizzleLikeError = new Error("Failed query: insert into \"requests\" ...");
     (drizzleLikeError as { cause?: unknown }).cause = { code: "23505", constraint: "some_unknown_constraint" };
-    vi.spyOn(db, "insert").mockImplementationOnce(() => {
-      throw drizzleLikeError;
-    });
+    vi.spyOn(db, "transaction").mockRejectedValueOnce(drizzleLikeError);
     const res = await requester.agent.post("/api/requests/send")
       .set("Idempotency-Key", `${stamp}-exc14b-${keyCounter}`)
       .send({ medicineId: medicine.id, requestedQuantity: 1 });
@@ -632,5 +637,630 @@ describe("EXC-014: unexpected database errors return a generic 500 without leaki
     expect(res.body).toEqual({ error: "Internal server error" });
     expect(res.text).not.toContain("some_unknown_constraint");
     expect(res.text).not.toContain("Failed query");
+  });
+});
+
+describe("D1-SNAP: sent/received expose the stored snapshot and stable ordering", () => {
+  it("sent and received keep the snapshot medicineName and unitPrice after the listing changes", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    expect(send.status).toBe(201);
+    expect(send.body.unitPrice).toBe("1.25");
+    createdRequestIds.push(send.body.id);
+
+    await db.update(medicinesTable)
+      .set({ name: "Renamed", price: "9.99" })
+      .where(eq(medicinesTable.id, medicine.id));
+
+    const sent = await requester.agent.get("/api/requests/sent");
+    expect(sent.status).toBe(200);
+    const sentRow = sent.body.find((r: any) => r.id === send.body.id);
+    expect(sentRow.medicineName).toBe("Paracetamol 500mg (EXC test)");
+    expect(sentRow.unitPrice).toBe("1.25");
+
+    const received = await provider.agent.get("/api/requests/received");
+    expect(received.status).toBe(200);
+    const receivedRow = received.body.find((r: any) => r.id === send.body.id);
+    expect(receivedRow.medicineName).toBe("Paracetamol 500mg (EXC test)");
+    expect(receivedRow.unitPrice).toBe("1.25");
+  });
+
+  it("orders by requestDate desc with id desc as the tie-break", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medA = await addMedicine(provider.agent, { quantity: 5 });
+    const medB = await addMedicine(provider.agent, { quantity: 5 });
+
+    const r1 = await sendRequest(requester.agent, medA.id, 1);
+    createdRequestIds.push(r1.body.id);
+    const r2 = await sendRequest(requester.agent, medB.id, 1);
+    createdRequestIds.push(r2.body.id);
+
+    const shared = new Date("2026-01-01T12:00:00Z");
+    await db.execute(sql`UPDATE requests SET request_date = ${shared} WHERE id = ${r1.body.id}`);
+    await db.execute(sql`UPDATE requests SET request_date = ${shared} WHERE id = ${r2.body.id}`);
+
+    const entries = await Promise.all([
+      requester.agent.get("/api/requests/sent"),
+      provider.agent.get("/api/requests/received"),
+    ]);
+    for (const res of entries) {
+      expect(res.status).toBe(200);
+      const ids: number[] = res.body.map((r: any) => r.id);
+      const i1 = ids.indexOf(r1.body.id);
+      const i2 = ids.indexOf(r2.body.id);
+      expect(i1).toBeGreaterThan(-1);
+      expect(i2).toBeGreaterThan(-1);
+      expect(i2).toBeLessThan(i1);
+    }
+  });
+});
+
+describe("D1-ACCEPT: accept re-validates current requester and medicine state", () => {
+  async function pendingRequest(overMedicine?: Partial<{ quantity: number; expiryDate: string }>) {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, overMedicine ?? { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    expect(send.status).toBe(201);
+    createdRequestIds.push(send.body.id);
+    return {
+      provider, requester, medicine,
+      requestId: send.body.id as number,
+      providerId: await pharmacyIdByEmail(provider.email),
+      requesterId: await pharmacyIdByEmail(requester.email),
+    };
+  }
+
+  async function quantityOf(medicineId: number): Promise<number> {
+    const [m] = await db.select({ quantity: medicinesTable.quantity }).from(medicinesTable).where(eq(medicinesTable.id, medicineId));
+    return m!.quantity;
+  }
+
+  async function notifCount(pharmacyId: number): Promise<number> {
+    const rows = await db.select({ id: notificationsTable.id }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId));
+    return rows.length;
+  }
+
+  async function statusOf(requestId: number): Promise<string> {
+    const [row] = await db.select({ status: requestsTable.status }).from(requestsTable).where(eq(requestsTable.id, requestId));
+    return row!.status;
+  }
+
+  it("blocks accept when the medicine became unavailable → 409 MEDICINE_UNAVAILABLE", async () => {
+    const ctx = await pendingRequest();
+    await db.update(medicinesTable).set({ isAvailable: false }).where(eq(medicinesTable.id, ctx.medicine.id));
+
+    const requesterBefore = await notifCount(ctx.requesterId);
+    const res = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("MEDICINE_UNAVAILABLE");
+    expect(await quantityOf(ctx.medicine.id)).toBe(5);
+    expect(await statusOf(ctx.requestId)).toBe("pending");
+    expect(await notifCount(ctx.requesterId)).toBe(requesterBefore);
+  });
+
+  it("allows accept when the medicine expires today (UTC boundary)", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const ctx = await pendingRequest({ quantity: 5, expiryDate: today });
+
+    const res = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(200);
+    expect(res.body.remainingStock).toBe(3);
+  });
+
+  it("blocks accept when the medicine expired yesterday → 409 MEDICINE_EXPIRED", async () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const ctx = await pendingRequest({ quantity: 5 });
+    await db.update(medicinesTable).set({ expiryDate: yesterday }).where(eq(medicinesTable.id, ctx.medicine.id));
+
+    const requesterBefore = await notifCount(ctx.requesterId);
+    const res = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("MEDICINE_EXPIRED");
+    expect(await quantityOf(ctx.medicine.id)).toBe(5);
+    expect(await statusOf(ctx.requestId)).toBe("pending");
+    expect(await notifCount(ctx.requesterId)).toBe(requesterBefore);
+  });
+
+  it("blocks accept when stock fell below the requested quantity → 409 INSUFFICIENT_STOCK", async () => {
+    const ctx = await pendingRequest({ quantity: 5 });
+    await db.update(medicinesTable).set({ quantity: 1 }).where(eq(medicinesTable.id, ctx.medicine.id));
+
+    const requesterBefore = await notifCount(ctx.requesterId);
+    const res = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STOCK");
+    expect(await quantityOf(ctx.medicine.id)).toBe(1);
+    expect(await statusOf(ctx.requestId)).toBe("pending");
+    expect(await notifCount(ctx.requesterId)).toBe(requesterBefore);
+  });
+
+  it.each([
+    ["pending", { verificationStatus: "pending", verifiedAt: null }],
+    ["rejected", { verificationStatus: "rejected", rejectionReason: "docs unclear" }],
+    ["inactive", { isActive: false }],
+  ])("blocks accept when the requester is %s → 409 REQUESTER_UNAVAILABLE", async (_label, patch) => {
+    const ctx = await pendingRequest();
+    await db.update(pharmaciesTable).set(patch as any).where(eq(pharmaciesTable.id, ctx.requesterId));
+
+    const requesterBefore = await notifCount(ctx.requesterId);
+    const res = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REQUESTER_UNAVAILABLE");
+    expect(JSON.stringify(res.body)).not.toContain("docs unclear");
+    expect(JSON.stringify(res.body)).not.toContain("rejectionReason");
+    expect(JSON.stringify(res.body)).not.toContain("verificationStatus");
+    expect(await quantityOf(ctx.medicine.id)).toBe(5);
+    expect(await statusOf(ctx.requestId)).toBe("pending");
+    expect(await notifCount(ctx.requesterId)).toBe(requesterBefore);
+  });
+});
+
+describe("D1-AUTH: request authorization matrix", () => {
+  async function setup() {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const bystander = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    return { provider, requester, bystander, requestId: send.body.id as number };
+  }
+
+  it("a third pharmacy cannot accept/reject/cancel/complete (403)", async () => {
+    const ctx = await setup();
+    const accept = await ctx.bystander.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    const reject = await ctx.bystander.agent.post(`/api/requests/${ctx.requestId}/reject`);
+    const cancel = await ctx.bystander.agent.post(`/api/requests/${ctx.requestId}/cancel`);
+    const complete = await ctx.bystander.agent.post(`/api/requests/${ctx.requestId}/complete`);
+    for (const r of [accept, reject, cancel, complete]) {
+      expect(r.status).toBe(403);
+      expect(r.body.code).toBe("REQUEST_FORBIDDEN");
+    }
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, ctx.requestId));
+    expect(row.status).toBe("pending");
+  });
+
+  it("requester cannot accept or reject (403)", async () => {
+    const ctx = await setup();
+    const accept = await ctx.requester.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    const reject = await ctx.requester.agent.post(`/api/requests/${ctx.requestId}/reject`);
+    expect(accept.status).toBe(403);
+    expect(accept.body.code).toBe("REQUEST_FORBIDDEN");
+    expect(reject.status).toBe(403);
+    expect(reject.body.code).toBe("REQUEST_FORBIDDEN");
+  });
+
+  it("provider cannot cancel or complete (403)", async () => {
+    const ctx = await setup();
+    const cancel = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/cancel`);
+    const complete = await ctx.provider.agent.post(`/api/requests/${ctx.requestId}/complete`);
+    expect(cancel.status).toBe(403);
+    expect(cancel.body.code).toBe("REQUEST_FORBIDDEN");
+    expect(complete.status).toBe(403);
+    expect(complete.body.code).toBe("REQUEST_FORBIDDEN");
+  });
+
+  it("sent lists only the requester's requests and received only the provider's", async () => {
+    const ctx = await setup();
+    const sent = await ctx.requester.agent.get("/api/requests/sent");
+    const received = await ctx.provider.agent.get("/api/requests/received");
+    const bystanderSent = await ctx.bystander.agent.get("/api/requests/sent");
+    const bystanderReceived = await ctx.bystander.agent.get("/api/requests/received");
+    expect(sent.body.map((r: any) => r.id)).toContain(ctx.requestId);
+    expect(received.body.map((r: any) => r.id)).toContain(ctx.requestId);
+    expect(bystanderSent.body).toHaveLength(0);
+    expect(bystanderReceived.body).toHaveLength(0);
+  });
+
+  it("operating on a foreign request id neither mutates nor leaks details", async () => {
+    const ctx = await setup();
+    const res = await ctx.bystander.agent.post(`/api/requests/${ctx.requestId}/accept`);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty("requesterName");
+    expect(res.body).not.toHaveProperty("providerName");
+    expect(res.body).not.toHaveProperty("medicineName");
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, ctx.requestId));
+    expect(row.status).toBe("pending");
+  });
+
+  it.each([
+    ["pending", { verificationStatus: "pending" }],
+    ["rejected", { verificationStatus: "rejected" }],
+    ["inactive", { isActive: false }],
+  ])("an actor whose pharmacy is %s is blocked by the middleware", async (_label, patch) => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 1);
+    createdRequestIds.push(send.body.id);
+
+    await db.update(pharmaciesTable).set(patch as any).where(eq(pharmaciesTable.id, await pharmacyIdByEmail(provider.email)));
+    const res = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect(res.status).toBe(403);
+    expect(res.body).toHaveProperty("code");
+  });
+});
+
+describe("D1-STATE: guarded transitions and terminal statuses", () => {
+  async function countNotifications(pharmacyId: number): Promise<number> {
+    const rows = await db.select({ id: notificationsTable.id }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId));
+    return rows.length;
+  }
+
+  it("complete on a pending request → 409 REQUEST_INVALID_STATE, no notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+
+    const providerBefore = await countNotifications(await pharmacyIdByEmail(provider.email));
+    const res = await requester.agent.post(`/api/requests/${send.body.id}/complete`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REQUEST_INVALID_STATE");
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(row.status).toBe("pending");
+    expect(await countNotifications(await pharmacyIdByEmail(provider.email))).toBe(providerBefore);
+  });
+
+  it("cancel on an accepted request → 409, no stock restore, no notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+
+    const accept = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect(accept.status).toBe(200);
+    const providerBefore = await countNotifications(await pharmacyIdByEmail(provider.email));
+
+    const cancel = await requester.agent.post(`/api/requests/${send.body.id}/cancel`);
+    expect(cancel.status).toBe(409);
+    expect(cancel.body.code).toBe("REQUEST_INVALID_STATE");
+
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(row.status).toBe("accepted");
+    const [after] = await db.select({ quantity: medicinesTable.quantity }).from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(after.quantity).toBe(3);
+    expect(await countNotifications(await pharmacyIdByEmail(provider.email))).toBe(providerBefore);
+  });
+
+  it("accept on a rejected request → 409, no deduction, no notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+
+    const reject = await provider.agent.post(`/api/requests/${send.body.id}/reject`);
+    expect(reject.status).toBe(200);
+
+    const res = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REQUEST_INVALID_STATE");
+    const [after] = await db.select({ quantity: medicinesTable.quantity }).from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(after.quantity).toBe(5);
+  });
+
+  it("reject on a completed request → 409, no notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+
+    await provider.agent.post(`/api/requests/${send.body.id}/accept`).expect(200);
+    await requester.agent.post(`/api/requests/${send.body.id}/complete`).expect(200);
+
+    const requesterBefore = await countNotifications(await pharmacyIdByEmail(requester.email));
+    const res = await provider.agent.post(`/api/requests/${send.body.id}/reject`);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REQUEST_INVALID_STATE");
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(row.status).toBe("completed");
+    expect(await countNotifications(await pharmacyIdByEmail(requester.email))).toBe(requesterBefore);
+  });
+});
+
+describe("D1-NOTIF: exactly one notification to the counterparty per transition", () => {
+  async function notificationsFor(pharmacyId: number) {
+    return db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId));
+  }
+
+  async function countNow(pharmacyId: number): Promise<number> {
+    return (await notificationsFor(pharmacyId)).length;
+  }
+
+  it("send notifies only the provider with a single message", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const providerBefore = await countNow(providerId);
+    const requesterBefore = await countNow(requesterId);
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+
+    const providerNotifs = await notificationsFor(providerId);
+    const requesterNotifs = await notificationsFor(requesterId);
+    expect(providerNotifs).toHaveLength(providerBefore + 1);
+    expect(providerNotifs[providerBefore].message).toContain("طلب جديد");
+    expect(requesterNotifs).toHaveLength(requesterBefore);
+  });
+
+  it("accept notifies only the requester", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const providerBefore = await countNow(providerId);
+    const requesterBefore = await countNow(requesterId);
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    const accept = await provider.agent.post(`/api/requests/${send.body.id}/accept`);
+    expect(accept.status).toBe(200);
+
+    const requesterNotifs = await notificationsFor(requesterId);
+    expect(requesterNotifs).toHaveLength(requesterBefore + 1);
+    expect(requesterNotifs[requesterBefore].message).toContain("تم قبول");
+    const providerNotifs = await notificationsFor(providerId);
+    expect(providerNotifs).toHaveLength(providerBefore + 1);
+    expect(providerNotifs[providerBefore].message).toContain("طلب جديد");
+  });
+
+  it("reject notifies only the requester", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const providerBefore = await countNow(providerId);
+    const requesterBefore = await countNow(requesterId);
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    const reject = await provider.agent.post(`/api/requests/${send.body.id}/reject`);
+    expect(reject.status).toBe(200);
+
+    const requesterNotifs = await notificationsFor(requesterId);
+    expect(requesterNotifs).toHaveLength(requesterBefore + 1);
+    expect(requesterNotifs[requesterBefore].message).toContain("تم رفض");
+    const providerNotifs = await notificationsFor(providerId);
+    expect(providerNotifs).toHaveLength(providerBefore + 1);
+  });
+
+  it("cancel notifies only the provider", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const providerBefore = await countNow(providerId);
+    const requesterBefore = await countNow(requesterId);
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    const cancel = await requester.agent.post(`/api/requests/${send.body.id}/cancel`);
+    expect(cancel.status).toBe(200);
+
+    const providerNotifs = await notificationsFor(providerId);
+    expect(providerNotifs).toHaveLength(providerBefore + 2);
+    expect(providerNotifs[providerBefore + 1].message).toContain("ألغى");
+    const requesterNotifs = await notificationsFor(requesterId);
+    expect(requesterNotifs).toHaveLength(requesterBefore);
+  });
+
+  it("complete notifies only the provider", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const providerBefore = await countNow(providerId);
+    const requesterBefore = await countNow(requesterId);
+
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    await provider.agent.post(`/api/requests/${send.body.id}/accept`).expect(200);
+    await requester.agent.post(`/api/requests/${send.body.id}/complete`).expect(200);
+
+    const providerNotifs = await notificationsFor(providerId);
+    expect(providerNotifs).toHaveLength(providerBefore + 2);
+    expect(providerNotifs[providerBefore + 1].message).toContain("أكدت الصيدلية الطالبة");
+    const requesterNotifs = await notificationsFor(requesterId);
+    expect(requesterNotifs).toHaveLength(requesterBefore + 1);
+    expect(requesterNotifs[requesterBefore].message).toContain("تم قبول");
+  });
+});
+
+describe("D1-CONC: concurrency invariants on real rows", () => {
+  async function notifCount(pharmacyId: number): Promise<number> {
+    const rows = await db.select({ id: notificationsTable.id }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId));
+    return rows.length;
+  }
+
+  it("A. accept || accept on the last unit: one 200, one 409, single deduction, one notification", async () => {
+    const provider = await registerPharmacy();
+    const reqA = await registerPharmacy();
+    const reqB = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 1 });
+
+    const sendA = await sendRequest(reqA.agent, medicine.id, 1);
+    const sendB = await sendRequest(reqB.agent, medicine.id, 1);
+    createdRequestIds.push(sendA.body.id, sendB.body.id);
+
+    const reqAId = await pharmacyIdByEmail(reqA.email);
+    const reqBId = await pharmacyIdByEmail(reqB.email);
+    const combinedBefore = (await notifCount(reqAId)) + (await notifCount(reqBId));
+
+    const results = await Promise.all([
+      provider.agent.post(`/api/requests/${sendA.body.id}/accept`),
+      provider.agent.post(`/api/requests/${sendB.body.id}/accept`),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.body.code).toBe("INSUFFICIENT_STOCK");
+
+    const rows = await db.select().from(requestsTable).where(inArray(requestsTable.id, [sendA.body.id, sendB.body.id]));
+    expect(rows.filter((r) => r.status === "accepted")).toHaveLength(1);
+    const [after] = await db.select({ quantity: medicinesTable.quantity }).from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    expect(after.quantity).toBe(0);
+
+    expect((await notifCount(reqAId)) + (await notifCount(reqBId)) - combinedBefore).toBe(1);
+  });
+
+  it("B. accept || reject: exactly one 200, no rejected-with-deduction, one notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const before = await notifCount(requesterId);
+    const results = await Promise.all([
+      provider.agent.post(`/api/requests/${send.body.id}/accept`),
+      provider.agent.post(`/api/requests/${send.body.id}/reject`),
+    ]);
+    const winners = results.filter((r) => r.status === 200);
+    const losers = results.filter((r) => r.status === 409);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0].body.code).toBe("REQUEST_INVALID_STATE");
+
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    const [after] = await db.select({ quantity: medicinesTable.quantity }).from(medicinesTable).where(eq(medicinesTable.id, medicine.id));
+    const delta = await notifCount(requesterId) - before;
+    expect(delta).toBe(1);
+    if (row.status === "accepted") {
+      expect(after.quantity).toBe(3);
+    } else {
+      expect(row.status).toBe("rejected");
+      expect(after.quantity).toBe(5);
+    }
+    const [notif] = await db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, requesterId)).orderBy(desc(notificationsTable.id));
+    if (row.status === "accepted") {
+      expect(notif.message).toContain("تم قبول");
+    } else {
+      expect(notif.message).toContain("تم رفض");
+    }
+  });
+
+  it("C. reject || cancel: exactly one 200, one 409, single final state, one notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const requesterId = await pharmacyIdByEmail(requester.email);
+
+    const totalBefore = (await notifCount(providerId)) + (await notifCount(requesterId));
+    const results = await Promise.all([
+      provider.agent.post(`/api/requests/${send.body.id}/reject`),
+      requester.agent.post(`/api/requests/${send.body.id}/cancel`),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.body.code).toBe("REQUEST_INVALID_STATE");
+
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(["rejected", "cancelled"]).toContain(row.status);
+
+    const providerDelta = (await notifCount(providerId)) + (await notifCount(requesterId)) - totalBefore;
+    expect(providerDelta).toBe(1);
+  });
+
+  it("D. complete || complete: exactly one 200, one 409, one notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const send = await sendRequest(requester.agent, medicine.id, 2);
+    createdRequestIds.push(send.body.id);
+    await provider.agent.post(`/api/requests/${send.body.id}/accept`).expect(200);
+
+    const providerId = await pharmacyIdByEmail(provider.email);
+    const before = await notifCount(providerId);
+    const results = await Promise.all([
+      requester.agent.post(`/api/requests/${send.body.id}/complete`),
+      requester.agent.post(`/api/requests/${send.body.id}/complete`),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.body.code).toBe("REQUEST_INVALID_STATE");
+
+    const [row] = await db.select().from(requestsTable).where(eq(requestsTable.id, send.body.id));
+    expect(row.status).toBe("completed");
+    expect(await notifCount(providerId) - before).toBe(1);
+  });
+
+  it("E. concurrent sends with the same idempotency key: one request, one notification", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-d1e-${keyCounter}`;
+    const results = await Promise.all([
+      requester.agent.post("/api/requests/send")
+        .set("Idempotency-Key", sharedKey)
+        .send({ medicineId: medicine.id, requestedQuantity: 1 }),
+      requester.agent.post("/api/requests/send")
+        .set("Idempotency-Key", sharedKey)
+        .send({ medicineId: medicine.id, requestedQuantity: 1 }),
+    ]);
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 201]);
+
+    const rows = await db.select().from(requestsTable).where(eq(requestsTable.idempotencyKey, sharedKey));
+    expect(rows).toHaveLength(1);
+    createdRequestIds.push(rows[0].id);
+
+    const notifs = await db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, providerId));
+    expect(notifs.filter((n) => n.message.includes("طلب جديد"))).toHaveLength(1);
+  });
+});
+
+describe("D1-IDEM-RETRY: sequential same-key retry creates no second notification", () => {
+  it("a repeated send with the same idempotency key returns the duplicate without notifying again", async () => {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    const medicine = await addMedicine(provider.agent, { quantity: 5 });
+    const providerId = await pharmacyIdByEmail(provider.email);
+
+    keyCounter += 1;
+    const sharedKey = `${stamp}-d1retry-${keyCounter}`;
+    const first = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    expect(first.status).toBe(201);
+    createdRequestIds.push(first.body.id);
+
+    const second = await requester.agent.post("/api/requests/send")
+      .set("Idempotency-Key", sharedKey)
+      .send({ medicineId: medicine.id, requestedQuantity: 1 });
+    expect(second.status).toBe(200);
+    expect(second.body.duplicate).toBe(true);
+
+    const notifs = await db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, providerId));
+    expect(notifs.filter((n) => n.message.includes("طلب جديد"))).toHaveLength(1);
   });
 });
