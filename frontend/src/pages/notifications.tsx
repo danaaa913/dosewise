@@ -260,7 +260,7 @@ export default function NotificationsPage() {
           )}
         </Empty>
       ) : (
-        <div className="space-y-3" role="list">
+        <div className="space-y-3">
           {notifications.map((n: Notification) => {
             const isMutatingThis = pendingMarkId === n.id;
             const targetUrl = getTargetRoute(n.type, n.requestId);
@@ -276,14 +276,26 @@ export default function NotificationsPage() {
               });
             }
 
+            const rowLabel = n.metadata?.medicineName
+              ? interpolate(t.notifications.viewRequestAria, { medicine: n.metadata.medicineName })
+              : messageText;
+
             return (
               <div
                 key={n.id}
-                role="listitem"
+                role="button"
+                tabIndex={0}
+                aria-label={rowLabel}
                 onClick={() => handleOpenNotification(n)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleOpenNotification(n);
+                  }
+                }}
                 className={cn(
                   "group relative p-4 rounded-xl border transition-all cursor-pointer",
-                  "hover:shadow-md hover:border-[#3f8b8e]/40 focus-within:ring-2 focus-within:ring-[#3f8b8e]",
+                  "hover:shadow-md hover:border-[#3f8b8e]/40 focus-within:ring-2 focus-within:ring-[#3f8b8e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3f8b8e] focus-visible:ring-offset-2",
                   n.isRead
                     ? "bg-white border-slate-200"
                     : "bg-emerald-50/70 border-emerald-200 shadow-sm"

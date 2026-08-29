@@ -10,6 +10,17 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { useState, useEffect } from "react";
 
 const PAGE_SIZE = 20;
@@ -26,16 +37,21 @@ function buildPageItems(current: number, totalPages: number): (number | "…")[]
   return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
 }
 
-const VERIFICATION_BADGES: Record<string, { label: string; cls: string }> = {
-  pending: { label: "قيد المراجعة", cls: "bg-amber-100 text-amber-700" },
-  approved: { label: "معتمدة", cls: "bg-emerald-100 text-emerald-700" },
-  rejected: { label: "مرفوضة", cls: "bg-red-100 text-red-600" },
+const VERIFICATION_BADGES: Record<string, { cls: string }> = {
+  pending: { cls: "bg-amber-100 text-amber-700" },
+  approved: { cls: "bg-emerald-100 text-emerald-700" },
+  rejected: { cls: "bg-red-100 text-red-600" },
 };
 
 export default function AdminDashboardPage() {
+  const { t } = useLanguage();
   const [tab, setTab] = useState<"overview" | "pharmacies" | "medicines">("overview");
   const [pharmaciesPage, setPharmaciesPage] = useState(1);
   const [medicinesPage, setMedicinesPage] = useState(1);
+  const [approveTarget, setApproveTarget] = useState<number | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<number | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const qc = useQueryClient();
   const [actionError, setActionError] = useState("");
 
@@ -46,19 +62,8 @@ export default function AdminDashboardPage() {
       setActionError("");
       qc.invalidateQueries({ queryKey: ["admin-pharmacies"] });
     },
-    onError: (e: Error) => setActionError(e.message),
+    onError: (e: Error) => setActionError(e.message || t.admin.errors.action),
   });
-
-  const decide = (id: number, decision: "approve" | "reject") => {
-    if (decision === "approve" && !confirm("اعتماد هذه الصيدلية وتمكينها من التبادل؟")) return;
-    let reason: string | undefined;
-    if (decision === "reject") {
-      const entered = prompt("سبب الرفض (سيصل للصيدلية ويُسجل بالتدقيق):");
-      if (!entered || entered.trim().length < 5) return;
-      reason = entered;
-    }
-    decideMut.mutate({ id, decision, reason: reason ?? undefined });
-  };
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: api.admin.stats });
   const { data: pharmacies } = useQuery({
@@ -84,11 +89,11 @@ export default function AdminDashboardPage() {
   }, [medicinesPage, medicinesTotalPages]);
 
   const statCards = [
-    { label: "إجمالي الصيدليات", value: stats?.totalPharmacies ?? 0, color: "emerald" },
-    { label: "إجمالي الأدوية", value: stats?.totalMedicines ?? 0, color: "blue" },
-    { label: "إجمالي الطلبات", value: stats?.totalRequests ?? 0, color: "violet" },
-    { label: "اشتراكات نشطة", value: stats?.activeSubscriptions ?? 0, color: "amber" },
-    { label: "طلبات معلقة", value: stats?.pendingRequests ?? 0, color: "red" },
+    { label: t.admin.stats.totalPharmacies, value: stats?.totalPharmacies ?? 0, color: "emerald" },
+    { label: t.admin.stats.totalMedicines, value: stats?.totalMedicines ?? 0, color: "blue" },
+    { label: t.admin.stats.totalRequests, value: stats?.totalRequests ?? 0, color: "violet" },
+    { label: t.admin.stats.activeSubscriptions, value: stats?.activeSubscriptions ?? 0, color: "amber" },
+    { label: t.admin.stats.pendingRequests, value: stats?.pendingRequests ?? 0, color: "red" },
   ];
 
   const colorMap: Record<string, string> = {
@@ -100,22 +105,22 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <AdminLayout title="لوحة تحكم الإدارة">
+    <AdminLayout title={t.admin.title}>
       {/* Tab bar */}
       <div className="flex gap-1 mb-8 bg-slate-100 p-1 rounded-xl w-fit">
         {[
-          { id: "overview", label: "نظرة عامة" },
-          { id: "pharmacies", label: "الصيدليات" },
-          { id: "medicines", label: "الأدوية" },
-        ].map((t) => (
+          { id: "overview", label: t.admin.tabs.overview },
+          { id: "pharmacies", label: t.admin.tabs.pharmacies },
+          { id: "medicines", label: t.admin.tabs.medicines },
+        ].map((tabItem) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id as any)}
+            key={tabItem.id}
+            onClick={() => setTab(tabItem.id as any)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              tab === tabItem.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>
@@ -142,14 +147,22 @@ export default function AdminDashboardPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["الاسم", "المسؤول", "البريد الإلكتروني", "المدينة", "الاعتماد", "السجل التجاري", ""].map((h) => (
+                {[
+                  t.admin.table.name,
+                  t.admin.table.manager,
+                  t.admin.table.email,
+                  t.admin.table.city,
+                  t.admin.table.verification,
+                  t.admin.table.license,
+                  t.admin.table.actions,
+                ].map((h) => (
                   <th key={h} className="text-right px-4 py-3 text-xs font-semibold text-slate-600">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {(pharmacies?.data ?? []).map((p) => {
-                const badge = VERIFICATION_BADGES[p.verificationStatus] ?? VERIFICATION_BADGES.pending;
+                const badgeStatus = p.verificationStatus === "approved" ? "approved" : p.verificationStatus === "rejected" ? "rejected" : "pending";
                 return (
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
@@ -157,7 +170,9 @@ export default function AdminDashboardPage() {
                   <td className="px-4 py-3 text-slate-500 text-xs" dir="ltr">{p.email}</td>
                   <td className="px-4 py-3 text-slate-600">{p.city}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${VERIFICATION_BADGES[badgeStatus].cls}`}>
+                      {t.admin.verification[badgeStatus]}
+                    </span>
                     {p.verificationStatus === "rejected" && p.rejectionReason && (
                       <p className="text-[11px] text-slate-400 mt-1 max-w-[160px]">{p.rejectionReason}</p>
                     )}
@@ -171,29 +186,33 @@ export default function AdminDashboardPage() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        📎 {p.licenseDocName ?? "المستند"}
+                        📎 {p.licenseDocName ?? t.admin.table.document}
                       </a>
                     ) : (
-                      <span className="text-slate-400">لا يوجد ملف</span>
+                      <span className="text-slate-400">{t.admin.table.noFile}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     {p.verificationStatus !== "approved" && (
                       <button
-                        onClick={() => decide(p.id, "approve")}
+                        onClick={() => setApproveTarget(p.id)}
                         disabled={decideMut.isPending}
                         className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 min-h-[36px]"
                       >
-                        اعتماد
+                        {t.admin.actions.approve}
                       </button>
                     )}
                     {p.verificationStatus === "pending" && (
                       <button
-                        onClick={() => decide(p.id, "reject")}
+                        onClick={() => {
+                          setRejectTarget(p.id);
+                          setRejectReason("");
+                          setRejectOpen(true);
+                        }}
                         disabled={decideMut.isPending}
                         className="ms-1 border border-red-300 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-60 min-h-[36px]"
                       >
-                        رفض
+                        {t.admin.actions.reject}
                       </button>
                     )}
                   </td>
@@ -204,11 +223,12 @@ export default function AdminDashboardPage() {
           </table>
           </div>
           {(pharmacies?.pagination.total ?? 0) > PAGE_SIZE && (
-            <Pagination className="pt-2">
+            <Pagination label={t.common.pagination.paginationLabel} className="pt-2">
               <PaginationContent>
                 <PaginationItem>
                   <PaginationPrevious
                     href="#"
+                    label={t.common.pagination.previous}
                     onClick={(e) => {
                       e.preventDefault();
                       if (pharmaciesPage > 1) setPharmaciesPage(pharmaciesPage - 1);
@@ -219,7 +239,7 @@ export default function AdminDashboardPage() {
                 {buildPageItems(pharmaciesPage, pharmaciesTotalPages).map((item, index) =>
                   item === "…" ? (
                     <PaginationItem key={`ellipsis-${index}`}>
-                      <PaginationEllipsis />
+                      <PaginationEllipsis label={t.common.pagination.morePages} />
                     </PaginationItem>
                   ) : (
                     <PaginationItem key={item}>
@@ -239,6 +259,7 @@ export default function AdminDashboardPage() {
                 <PaginationItem>
                   <PaginationNext
                     href="#"
+                    label={t.common.pagination.next}
                     onClick={(e) => {
                       e.preventDefault();
                       if (pharmaciesPage < pharmaciesTotalPages) setPharmaciesPage(pharmaciesPage + 1);
@@ -258,7 +279,15 @@ export default function AdminDashboardPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {["اسم الدواء", "الصيدلية", "المدينة", "الكمية", "السعر (JOD)", "الصلاحية", "الحالة"].map((h) => (
+                {[
+                  t.admin.table.medicineName,
+                  t.admin.table.pharmacy,
+                  t.admin.table.medicineCity,
+                  t.admin.table.quantity,
+                  t.admin.table.price,
+                  t.admin.table.expiry,
+                  t.admin.table.status,
+                ].map((h) => (
                   <th key={h} className="text-right px-4 py-3 text-xs font-semibold text-slate-600">{h}</th>
                 ))}
               </tr>
@@ -276,7 +305,7 @@ export default function AdminDashboardPage() {
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                       m.isAvailable ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
                     }`}>
-                      {m.isAvailable ? "متاح" : "غير متاح"}
+                      {m.isAvailable ? t.admin.availability.available : t.admin.availability.unavailable}
                     </span>
                   </td>
                 </tr>
@@ -284,11 +313,12 @@ export default function AdminDashboardPage() {
             </tbody>
           </table>
           {(medicines?.pagination.total ?? 0) > PAGE_SIZE && (
-            <Pagination className="pt-2">
+            <Pagination label={t.common.pagination.paginationLabel} className="pt-2">
               <PaginationContent>
                 <PaginationItem>
                   <PaginationPrevious
                     href="#"
+                    label={t.common.pagination.previous}
                     onClick={(e) => {
                       e.preventDefault();
                       if (medicinesPage > 1) setMedicinesPage(medicinesPage - 1);
@@ -299,7 +329,7 @@ export default function AdminDashboardPage() {
                 {buildPageItems(medicinesPage, medicinesTotalPages).map((item, index) =>
                   item === "…" ? (
                     <PaginationItem key={`ellipsis-${index}`}>
-                      <PaginationEllipsis />
+                      <PaginationEllipsis label={t.common.pagination.morePages} />
                     </PaginationItem>
                   ) : (
                     <PaginationItem key={item}>
@@ -319,6 +349,7 @@ export default function AdminDashboardPage() {
                 <PaginationItem>
                   <PaginationNext
                     href="#"
+                    label={t.common.pagination.next}
                     onClick={(e) => {
                       e.preventDefault();
                       if (medicinesPage < medicinesTotalPages) setMedicinesPage(medicinesPage + 1);
@@ -331,6 +362,71 @@ export default function AdminDashboardPage() {
           )}
         </div>
       )}
+
+      {/* Approve confirmation */}
+      <AlertDialog
+        open={approveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setApproveTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.admin.dialogs.approveTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.admin.dialogs.approveDesc}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.admin.dialogs.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (approveTarget !== null) decideMut.mutate({ id: approveTarget, decision: "approve" });
+              }}
+            >
+              {t.admin.dialogs.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject with reason */}
+      <AlertDialog
+        open={rejectOpen}
+        onOpenChange={(open) => {
+          setRejectOpen(open);
+          if (!open) setRejectReason("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.admin.dialogs.rejectTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.admin.dialogs.rejectDesc}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={3}
+            placeholder={t.admin.dialogs.reasonPlaceholder}
+            aria-label={t.admin.dialogs.rejectDesc}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+          />
+          {rejectReason.trim().length > 0 && rejectReason.trim().length < 5 && (
+            <p className="text-xs text-red-600">{t.admin.dialogs.reasonShort}</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.admin.dialogs.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={rejectReason.trim().length < 5}
+              onClick={() => {
+                if (rejectTarget !== null) {
+                  decideMut.mutate({ id: rejectTarget, decision: "reject", reason: rejectReason.trim() });
+                }
+              }}
+            >
+              {t.admin.dialogs.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

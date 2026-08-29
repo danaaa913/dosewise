@@ -5,6 +5,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { api, type Plan } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useState } from "react";
@@ -13,7 +23,11 @@ export default function SubscriptionsPage() {
   const qc = useQueryClient();
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
-  const { t } = useLanguage();
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const { t, lang } = useLanguage();
+
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
+  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["sub-status"],
@@ -29,11 +43,11 @@ export default function SubscriptionsPage() {
     mutationFn: (planId: string) => api.subscriptions.payment(planId),
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["sub-status"] });
-      setFeedback(data.message ?? "تم تفعيل الاشتراك بنجاح");
+      setFeedback(data.message ?? t.subscriptions.successActivated);
       setTimeout(() => setFeedback(""), 5000);
     },
     onError: (e: any) => {
-      setError(e.message);
+      setError(e.message ?? t.subscriptions.errors.action);
       setTimeout(() => setError(""), 5000);
     },
   });
@@ -42,7 +56,7 @@ export default function SubscriptionsPage() {
     mutationFn: api.subscriptions.cancel,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sub-status"] });
-      setFeedback("تم إلغاء الاشتراك");
+      setFeedback(t.subscriptions.successCancelled);
       setTimeout(() => setFeedback(""), 4000);
     },
   });
@@ -65,11 +79,18 @@ export default function SubscriptionsPage() {
     },
   };
 
+  const planName = (planId: string | null | undefined) => {
+    if (planId === "monthly") return t.subscriptions.plan.monthly;
+    if (planId === "yearly") return t.subscriptions.plan.yearly;
+    return t.subscriptions.plan.free;
+  };
+
   return (
-    <Layout title="الاشتراكات">
+    <Layout title={t.subscriptions.title}>
       {plans?.demoMode && (
         <div className="mb-5 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
-          <span className="font-bold">⚠️ وضع تجريبي:</span> المدفوعات حالياً محاكاة فقط لأغراض العرض. لا تُدخل بيانات بطاقة حقيقية — لن تُقبل ولن تُخزن.
+          <span className="font-bold">{t.subscriptions.demoModeTitle}</span>{" "}
+          {t.subscriptions.demoModeDesc}
         </div>
       )}
       {feedback && (
@@ -88,30 +109,32 @@ export default function SubscriptionsPage() {
         <div className={`mb-8 p-5 rounded-xl border ${
           status.isSubscribed ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"
         }`}>
-          <h3 className="font-semibold text-slate-800 mb-2">الاشتراك الحالي</h3>
+          <h3 className="font-semibold text-slate-800 mb-2">{t.subscriptions.currentTitle}</h3>
           {status.isSubscribed ? (
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-700">
-                  خطة{" "}
+                  {t.subscriptions.planLabel}{" "}
                   <span className="font-medium text-emerald-700">
-                    {status.plan === "monthly" ? "الشهرية" : status.plan === "yearly" ? "السنوية" : "المجانية"}
+                    {planName(status.plan)}
                   </span>
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  تنتهي في {status.endDate ? new Date(status.endDate).toLocaleDateString("ar-JO") : "—"} ({status.daysRemaining} يوم متبقي)
+                  {t.subscriptions.endsOn
+                    .replace("{date}", status.endDate ? dateFmt.format(new Date(status.endDate as string)) : "—")
+                    .replace("{count}", String(status.daysRemaining))}
                 </p>
               </div>
               <button
-                onClick={() => { if (confirm("هل تريد إلغاء اشتراكك؟")) cancelMut.mutate(); }}
+                onClick={() => setCancelOpen(true)}
                 disabled={cancelMut.isPending}
                 className="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-60"
               >
-                إلغاء الاشتراك
+                {t.subscriptions.cancelButton}
               </button>
             </div>
           ) : (
-            <p className="text-sm text-slate-600">لا يوجد اشتراك نشط. اختر خطة أدناه للبدء.</p>
+            <p className="text-sm text-slate-600">{t.subscriptions.noActive}</p>
           )}
         </div>
       )}
@@ -143,26 +166,29 @@ export default function SubscriptionsPage() {
           {(plans?.plans ?? []).map((plan: Plan) => {
             const colors = planColorMap[plan.id] ?? planColorMap.free;
             const isCurrent = status?.plan === plan.id && status.isSubscribed;
+            const periodLabel = plan.durationDays === 30 ? t.subscriptions.perMonth : t.subscriptions.perYear;
             return (
               <div
                 key={plan.id}
                 className={`bg-white rounded-2xl border-2 p-6 flex flex-col ${colors.ring} ${isCurrent ? "shadow-md" : ""}`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-slate-800 text-base">الخطة {plan.name}</h4>
+                  <h4 className="font-bold text-slate-800 text-base">
+                    {t.subscriptions.planCardTitle.replace("{name}", plan.name)}
+                  </h4>
                   {isCurrent && (
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${colors.badge}`}>
-                      الحالية
+                      {t.subscriptions.currentBadge}
                     </span>
                   )}
                 </div>
                 <div className="mb-5">
                   <span className="text-3xl font-bold text-slate-800">
-                    {plan.price === 0 ? "مجاناً" : `${plan.price}`}
+                    {plan.price === 0 ? t.subscriptions.free : `${plan.price}`}
                   </span>
                   {plan.price > 0 && (
                     <span className="text-slate-500 text-sm mr-1">
-                      {plan.currency} / {plan.durationDays === 30 ? "شهر" : "سنة"}
+                      {plan.currency} / {periodLabel}
                     </span>
                   )}
                 </div>
@@ -181,7 +207,13 @@ export default function SubscriptionsPage() {
                   disabled={payMut.isPending || isCurrent}
                   className={`w-full text-white py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${colors.btn}`}
                 >
-                  {isCurrent ? "الخطة النشطة" : plan.price === 0 ? "تفعيل مجاني" : `اشترك الآن — ${plan.price} ${plan.currency}`}
+                  {isCurrent
+                    ? t.subscriptions.activePlanButton
+                    : plan.price === 0
+                      ? t.subscriptions.activateFree
+                      : t.subscriptions.subscribeNow
+                          .replace("{price}", `${plan.price}`)
+                          .replace("{currency}", plan.currency)}
                 </button>
               </div>
             );
@@ -190,8 +222,23 @@ export default function SubscriptionsPage() {
       )}
 
       <p className="text-xs text-slate-400 text-center mt-8">
-        الدفع تجريبي — لا تتطلب هذه المنصة بيانات بطاقة حقيقية
+        {t.subscriptions.demoFooter}
       </p>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.subscriptions.cancelTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.subscriptions.cancelDesc}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.subscriptions.cancelDialogCancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => cancelMut.mutate()}>
+              {t.subscriptions.cancelConfirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { api, formatPrice } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
 
@@ -15,19 +17,19 @@ export default function AnalyticsPage() {
     queryKey: ["analytics-medicines"],
     queryFn: api.ai.medicines,
   });
-  const { data: recData, isLoading: recLoading } = useQuery({
+  const { data: recData, isLoading: recLoading, isError: recError, refetch: recRefetch } = useQuery({
     queryKey: ["analytics-rec"],
     queryFn: api.ai.recommendations,
   });
-  const { data: sugData, isLoading: sugLoading } = useQuery({
+  const { data: sugData, isLoading: sugLoading, isError: sugError, refetch: sugRefetch } = useQuery({
     queryKey: ["analytics-sug"],
     queryFn: api.ai.medicineSuggestions,
   });
-  const { data: priceData, isLoading: priceLoading } = useQuery({
+  const { data: priceData, isLoading: priceLoading, isError: priceError, refetch: priceRefetch } = useQuery({
     queryKey: ["analytics-price", selectedMedicine],
     queryFn: () => api.ai.priceOptimization(selectedMedicine || undefined),
   });
-  const { data: forecastData, isLoading: forecastLoading } = useQuery({
+  const { data: forecastData, isLoading: forecastLoading, isError: forecastError, refetch: forecastRefetch } = useQuery({
     queryKey: ["analytics-forecast", selectedMedicine],
     queryFn: () => api.ai.demandForecast(selectedMedicine || undefined),
   });
@@ -93,7 +95,13 @@ export default function AnalyticsPage() {
         <div className="space-y-3">
           <p className="text-sm text-slate-500 mb-4">{t.analytics.recommendationsHint}</p>
           {recLoading && <p className="text-sm text-slate-400 text-center py-8">{t.loading}</p>}
-          {!recLoading && (recData?.recommendations ?? []).length === 0 && (
+          {recError && !recLoading && (
+            <Alert variant="destructive" className="my-4">
+              <p className="text-sm">{t.errors.query}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => recRefetch()}>{t.errors.retry}</Button>
+            </Alert>
+          )}
+          {!recLoading && !recError && (recData?.recommendations ?? []).length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8 bg-white rounded-xl border border-slate-200">
               {t.analytics.noRecommendations}
             </p>
@@ -111,7 +119,13 @@ export default function AnalyticsPage() {
         <div className="space-y-3">
           <p className="text-sm text-slate-500 mb-4">{t.analytics.suggestionsHint}</p>
           {sugLoading && <p className="text-sm text-slate-400 text-center py-8">{t.loading}</p>}
-          {!sugLoading && (sugData?.suggestions ?? []).length === 0 && (
+          {sugError && !sugLoading && (
+            <Alert variant="destructive" className="my-4">
+              <p className="text-sm">{t.errors.query}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => sugRefetch()}>{t.errors.retry}</Button>
+            </Alert>
+          )}
+          {!sugLoading && !sugError && (sugData?.suggestions ?? []).length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8 bg-white rounded-xl border border-slate-200">
               {t.analytics.noData}
             </p>
@@ -142,7 +156,13 @@ export default function AnalyticsPage() {
               : t.analytics.pricesHint}
           </p>
           {priceLoading && <p className="text-sm text-slate-400 text-center py-8">{t.loading}</p>}
-          {!priceLoading && (priceData?.optimizations ?? []).length === 0 && (
+          {priceError && !priceLoading && (
+            <Alert variant="destructive" className="my-4">
+              <p className="text-sm">{t.errors.query}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => priceRefetch()}>{t.errors.retry}</Button>
+            </Alert>
+          )}
+          {!priceLoading && !priceError && (priceData?.optimizations ?? []).length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8 bg-white rounded-xl border border-slate-200">
               {selectedMedicine ? t.analytics.noPriceForMedicine : t.analytics.noMedicines}
             </p>
@@ -181,7 +201,13 @@ export default function AnalyticsPage() {
               : t.analytics.forecastHint}
           </p>
           {forecastLoading && <p className="text-sm text-slate-400 text-center py-8">{t.loading}</p>}
-          {!forecastLoading && (forecastData?.forecasts ?? []).length === 0 && (
+          {forecastError && !forecastLoading && (
+            <Alert variant="destructive" className="my-4">
+              <p className="text-sm">{t.errors.query}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => forecastRefetch()}>{t.errors.retry}</Button>
+            </Alert>
+          )}
+          {!forecastLoading && !forecastError && (forecastData?.forecasts ?? []).length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8 bg-white rounded-xl border border-slate-200">
               {t.analytics.noData}
             </p>

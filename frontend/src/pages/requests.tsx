@@ -450,11 +450,12 @@ export default function RequestsPage() {
           );
         })}
         {total > PAGE_SIZE && (
-          <Pagination className="pt-2">
+          <Pagination label={t.common.pagination.paginationLabel} className="pt-2">
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
+                  label={t.common.pagination.previous}
                   onClick={(e) => {
                     e.preventDefault();
                     if (page > 1) setPanelPage(page - 1);
@@ -465,7 +466,7 @@ export default function RequestsPage() {
               {buildPageItems(page, totalPages).map((item, index) =>
                 item === "…" ? (
                   <PaginationItem key={`ellipsis-${index}`}>
-                    <PaginationEllipsis />
+                    <PaginationEllipsis label={t.common.pagination.morePages} />
                   </PaginationItem>
                 ) : (
                   <PaginationItem key={item}>
@@ -485,6 +486,7 @@ export default function RequestsPage() {
               <PaginationItem>
                 <PaginationNext
                   href="#"
+                  label={t.common.pagination.next}
                   onClick={(e) => {
                     e.preventDefault();
                     if (page < totalPages) setPanelPage(page + 1);
