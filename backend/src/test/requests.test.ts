@@ -1,6 +1,6 @@
-﻿import { describe, it, expect, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, afterAll, afterEach, vi } from "vitest";
 import request from "supertest";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 import app from "../app.js";
 import { db, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
 
@@ -969,7 +969,7 @@ describe("D1-STATE: guarded transitions and terminal statuses", () => {
 
 describe("D1-NOTIF: exactly one notification to the counterparty per transition", () => {
   async function notificationsFor(pharmacyId: number) {
-    return db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId));
+    return db.select({ message: notificationsTable.message }).from(notificationsTable).where(eq(notificationsTable.pharmacyId, pharmacyId)).orderBy(asc(notificationsTable.id));
   }
 
   async function countNow(pharmacyId: number): Promise<number> {
