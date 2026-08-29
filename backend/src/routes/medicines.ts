@@ -5,6 +5,7 @@ import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedici
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 import { todayUtc } from "../lib/expiry.js";
 import { fail } from "../lib/request-state.js";
+import { logAudit } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -20,6 +21,15 @@ router.post("/medicines/add", requireApprovedPharmacy, async (req, res): Promise
     description: description ?? null,
     isAvailable: isAvailable ?? true,
   }).returning();
+
+  await logAudit(db, {
+    actorType: "pharmacy",
+    actorId: req.session.pharmacyId!,
+    action: "medicine.created",
+    targetType: "medicine",
+    targetId: medicine.id,
+    details: JSON.stringify({ name: medicine.name, quantity: medicine.quantity }),
+  });
 
   res.status(201).json({
     id: medicine.id, pharmacyId: medicine.pharmacyId, name: medicine.name,
@@ -96,6 +106,15 @@ router.put("/medicines/:medicineId/update", requireApprovedPharmacy, async (req,
   const [updated] = await db.update(medicinesTable).set(updateData)
     .where(eq(medicinesTable.id, params.data.medicineId)).returning();
 
+  await logAudit(db, {
+    actorType: "pharmacy",
+    actorId: req.session.pharmacyId!,
+    action: "medicine.updated",
+    targetType: "medicine",
+    targetId: updated.id,
+    details: JSON.stringify({ changedFields: Object.keys(updateData) }),
+  });
+
   res.json({
     id: updated.id, pharmacyId: updated.pharmacyId, name: updated.name,
     quantity: updated.quantity, price: updated.price, expiryDate: updated.expiryDate,
@@ -124,6 +143,14 @@ router.delete("/medicines/:medicineId/delete", requireApprovedPharmacy, async (r
     fail(res, 500, undefined, "Internal server error");
     return;
   }
+  await logAudit(db, {
+    actorType: "pharmacy",
+    actorId: req.session.pharmacyId!,
+    action: "medicine.deleted",
+    targetType: "medicine",
+    targetId: params.data.medicineId,
+    details: JSON.stringify({ name: existing.name }),
+  });
   res.json({ message: "Medicine deleted successfully" });
 });
 

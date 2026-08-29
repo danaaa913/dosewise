@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { ProcessPaymentBody } from "../zod/schemas.js";
 import { randomUUID } from "crypto";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
+import { logAudit } from "../lib/audit.js";
 
 const router: IRouter = Router();
 
@@ -67,6 +68,15 @@ router.post("/subscriptions/payment", requireApprovedPharmacy, async (req, res):
     subscriptionEndDate: endDate, lastPaymentDate: now,
   }).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
 
+  await logAudit(db, {
+    actorType: "pharmacy",
+    actorId: req.session.pharmacyId!,
+    action: "subscription.activated",
+    targetType: "subscription",
+    targetId: req.session.pharmacyId!,
+    details: JSON.stringify({ plan: planId }),
+  });
+
   res.json({ message: "تم تفعيل الاشتراك بنجاح", transactionId, plan: plan.name, expiresAt: endDate.toISOString() });
 });
 
@@ -74,6 +84,13 @@ router.post("/subscriptions/cancel", requireApprovedPharmacy, async (req, res): 
   await db.update(pharmaciesTable).set({
     isSubscribed: false, subscriptionPlan: null, subscriptionStartDate: null, subscriptionEndDate: null,
   }).where(eq(pharmaciesTable.id, req.session.pharmacyId!));
+  await logAudit(db, {
+    actorType: "pharmacy",
+    actorId: req.session.pharmacyId!,
+    action: "subscription.cancelled",
+    targetType: "subscription",
+    targetId: req.session.pharmacyId!,
+  });
   res.json({ message: "تم إلغاء الاشتراك بنجاح" });
 });
 
