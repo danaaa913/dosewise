@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeftRight,
@@ -72,7 +72,7 @@ function useUnreadCount() {
   const { isOperational } = useAuth();
   const { data } = useQuery({
     queryKey: ["notifications-count"],
-    queryFn: () => api.notifications.my(),
+    queryFn: () => api.notifications.unreadCount(),
     refetchInterval: 30000,
     enabled: isOperational,
   });
@@ -103,8 +103,9 @@ function NavContent({
 }) {
   const [location] = useLocation();
   const { pharmacy, logout } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const unreadCount = useUnreadCount();
+  const numberFmt = new Intl.NumberFormat(lang === "ar" ? "ar-JO" : "en-JO");
 
   const linkCls = (active: boolean) =>
     cn(
@@ -142,13 +143,15 @@ function NavContent({
               {!collapsed && <span>{t.nav[item.key]}</span>}
               {isNotif && unreadCount > 0 && (
                 <span
+                  role="status"
+                  aria-live="polite"
                   className={cn(
-                    "text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0",
+                    "text-xs font-bold rounded-full h-5 min-w-5 px-1 flex items-center justify-center flex-shrink-0",
                     collapsed ? "absolute top-1 end-1" : "ms-auto",
                     active ? "bg-white text-[#1b3a5f]" : "bg-[#3f8b8e] text-white"
                   )}
                 >
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {unreadCount > 9 ? "9+" : numberFmt.format(unreadCount)}
                 </span>
               )}
             </Link>
@@ -228,7 +231,7 @@ export function Layout({ children, title }: LayoutProps) {
               <Link href="/dashboard" className="flex items-center gap-3">
                 <Logo size={36} />
                 <div>
-                  <h1 className="text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</h1>
+                  <span className="block text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</span>
                   <p className="text-[11px] text-slate-400">{t.tagline}</p>
                 </div>
               </Link>
@@ -260,7 +263,7 @@ export function Layout({ children, title }: LayoutProps) {
           <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <Logo size={40} />
             <div>
-              <h1 className="text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</h1>
+              <span className="block text-base font-bold text-[#1b3a5f] leading-tight">DoseWise</span>
               <p className="text-[11px] text-slate-400">{t.tagline}</p>
             </div>
           </Link>
@@ -331,7 +334,7 @@ export function AdminLayout({ children, title }: LayoutProps) {
         <Logo size={28} />
       </div>
       <div>
-        <h1 className="text-sm font-bold text-white leading-tight">DoseWise</h1>
+        <span className="block text-sm font-bold text-white leading-tight">DoseWise</span>
         <p className="text-xs text-white/60">{t.adminTagline}</p>
       </div>
     </div>

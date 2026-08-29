@@ -1,4 +1,4 @@
-﻿const API_BASE = "/api";
+const API_BASE = "/api";
 
 export function formatPrice(value: string | number): string {
   return Number(value).toFixed(2);
@@ -118,8 +118,12 @@ export const api = {
       request<NotificationsResponse>(
         `/notifications/my${unreadOnly ? "?unread_only=true" : ""}`
       ),
+    unreadCount: () =>
+      request<{ unreadCount: number }>("/notifications/unread-count"),
     markRead: (notificationId: number) =>
       request(`/notifications/${notificationId}/mark-read`, { method: "POST" }),
+    markAllRead: () =>
+      request<{ updated: number }>("/notifications/mark-all-read", { method: "POST" }),
   },
   ai: {
     medicines: () => request<{ medicines: string[] }>("/ai/medicines?scope=market"),
@@ -222,12 +226,29 @@ export interface NotificationsResponse {
   unreadCount: number;
 }
 
+export type NotificationType =
+  | "REQUEST_RECEIVED"
+  | "REQUEST_ACCEPTED"
+  | "REQUEST_REJECTED"
+  | "REQUEST_CANCELLED"
+  | "REQUEST_COMPLETED";
+
+export interface NotificationMetadata {
+  medicineName: string;
+  requestedQuantity: number;
+  counterpartyName: string;
+}
+
 export interface Notification {
   id: number;
   pharmacyId: number;
+  type: NotificationType | null;
+  requestId: number | null;
+  metadata: NotificationMetadata | null;
   message: string;
   isRead: boolean;
   createdAt: string;
+  requestStatus?: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "expired" | null;
 }
 
 export interface AdminPharmacy {
