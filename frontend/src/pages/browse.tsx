@@ -1,226 +1,419 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Package, SearchX } from "lucide-react";
+import { Package, Search, SearchX, X } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Alert } from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { api, formatPrice, type AvailableMedicine } from "@/lib/api";
-import { useAuth } from "@/hooks/useAuth";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { api, type AvailableMedicine } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { toast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+const DEBOUNCE_MS = 350;
+
+function buildQtySchema(t: ReturnType<typeof useLanguage>["t"], maxQty: number, numberFmt: Intl.NumberFormat) {
+  return z.any().superRefine((v: unknown, ctx) => {
+    if (typeof v === "string" && v.trim() === "") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: t.browse.dialog.errors.required });
+      return;
+    }
+    if (v === undefined || v === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: t.browse.dialog.errors.required });
+      return;
+    }
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: t.browse.dialog.errors.invalid });
+      return;
+    }
+    if (n < 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: t.browse.dialog.errors.min });
+      return;
+    }
+    if (n > maxQty) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: t.browse.dialog.errors.max.replace("{max}", numberFmt.format(maxQty)),
+      });
+    }
+  });
+}
 
 export default function BrowsePage() {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [requesting, setRequesting] = useState<AvailableMedicine | null>(null);
-  const [idemKey, setIdemKey] = useState<string | null>(null);
-  const { pharmacy } = useAuth();
-  const notVerified = pharmacy?.verificationStatus !== "approved";
-  const [qty, setQty] = useState("1");
-  const [requestError, setRequestError] = useState("");
-  const [requestSuccess, setRequestSuccess] = useState("");
-  const submittingRef = useRef(false);
+  const { t, lang } = useLanguage();
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
 
-  const { t } = useLanguage();
+  const numberFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const priceFmt = useMemo(
+    () => new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    [locale]
+  );
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }),
+    [locale]
+  );
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selected, setSelected] = useState<AvailableMedicine | null>(null);
+  const [qty, setQty] = useState("1");
+  const [qtyError, setQtyError] = useState("");
+  const [dialogError, setDialogError] = useState("");
+  const [idemKey, setIdemKey] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const qtyInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!requesting) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setRequesting(null);
-        setRequestError("");
-        setIdemKey(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requesting]);
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [search]);
 
-  const { data: medicines, isLoading, isError, refetch } = useQuery({
-    queryKey: ["available-medicines", search],
-    queryFn: () => api.medicines.available(search || undefined),
+  const { data: medicines, isPending, isError, refetch } = useQuery({
+    queryKey: ["available-medicines", debouncedSearch],
+    queryFn: () => api.medicines.available(debouncedSearch || undefined),
   });
+
+  const closeDialog = () => {
+    setSelected(null);
+    setQty("1");
+    setQtyError("");
+    setDialogError("");
+    setIdemKey(null);
+  };
+
+  const openDialog = (m: AvailableMedicine) => {
+    setSelected(m);
+    setQty("1");
+    setQtyError("");
+    setDialogError("");
+    setIdemKey(crypto.randomUUID());
+  };
+
+  const restoreToOpener = (event: Event) => {
+    event.preventDefault();
+    openerRef.current?.focus();
+  };
+
+  const qtySchema = useMemo(
+    () => buildQtySchema(t, selected?.quantity ?? 0, numberFmt),
+    [t, selected, numberFmt]
+  );
 
   const sendMut = useMutation({
     mutationFn: () =>
       api.requests.send(
-        {
-          medicineId: requesting!.id,
-          requestedQuantity: Number(qty),
-        },
+        { medicineId: selected!.id, requestedQuantity: Number(qty) },
         idemKey!
       ),
     onSuccess: () => {
-      setRequestSuccess("تم إرسال الطلب بنجاح");
-      setRequesting(null);
-      setIdemKey(null);
+      toast({ title: t.browse.success });
       qc.invalidateQueries({ queryKey: ["requests-sent"] });
-      setTimeout(() => setRequestSuccess(""), 3000);
+      closeDialog();
     },
-    onError: (e: any) => {
-      const code = (e as { code?: string })?.code;
+    onError: (error: unknown) => {
+      const code = (error as { code?: string })?.code;
       const known: Record<string, string> = {
         PROVIDER_UNAVAILABLE: t.errorCodes.PROVIDER_UNAVAILABLE,
         DUPLICATE_PENDING_REQUEST: t.errorCodes.DUPLICATE_PENDING_REQUEST,
         IDEMPOTENCY_KEY_REUSED: t.errorCodes.IDEMPOTENCY_KEY_REUSED,
         MEDICINE_EXPIRED: t.errorCodes.MEDICINE_EXPIRED,
       };
-      setRequestError(code && known[code] ? known[code] : t.requests.errors.send);
+      setDialogError(code && known[code] ? known[code] : t.requests.errors.send);
     },
   });
 
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setDialogError("");
+    const result = qtySchema.safeParse(qty);
+    if (!result.success) {
+      setQtyError(result.error.issues[0]?.message ?? t.browse.dialog.errors.invalid);
+      return;
+    }
+    setQtyError("");
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    sendMut.mutate(undefined, {
+      onSettled: () => {
+        submittingRef.current = false;
+      },
+    });
+  };
+
+  const clearSearch = () => {
+    setSearch("");
+    setDebouncedSearch("");
+  };
+
+  const trimmed = debouncedSearch;
+  const hasData = medicines !== undefined;
+  const isInitialLoading = isPending && medicines === undefined;
+  const isInitialError = isError && medicines === undefined;
+  const isEmptyMarket = hasData && !isError && medicines.length === 0 && !trimmed;
+  const isNoResults = hasData && !isError && medicines.length === 0 && !!trimmed;
+
   return (
-    <Layout title="تصفح الأدوية المتاحة">
-      {/* Search */}
-      <div className="mb-6">
+    <Layout title={t.browse.title}>
+      <div className="space-y-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold text-brand-navy sm:text-2xl">{t.browse.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.browse.subtitle}</p>
+        </div>
+
         <div className="relative max-w-md">
-          <svg className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-          </svg>
-          <input
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="ابحث عن دواء..."
-            className="w-full pr-9 pl-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            placeholder={t.browse.searchPlaceholder}
+            aria-label={t.browse.searchPlaceholder}
+            className="ps-9 pe-9"
           />
+          {search.length > 0 && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              aria-label={t.browse.clearSearchAria}
+              className="absolute end-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          {hasData && !isInitialError && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t.browse.count.replace("{count}", numberFmt.format(medicines.length))}
+            </p>
+          )}
+
+          {isInitialLoading && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="space-y-3 rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-14" />
+                  </div>
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-3 w-28" />
+                  <Skeleton className="h-3 w-36" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isInitialError && (
+            <Alert variant="destructive">
+              <AlertDescription className="flex flex-col items-start gap-2">
+                <p>{t.errors.query}</p>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  {t.errors.retry}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {isEmptyMarket && (
+            <Empty>
+              <EmptyMedia variant="icon">
+                <Package className="size-6" aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>{t.browse.empty.title}</EmptyTitle>
+              <EmptyDescription>{t.browse.empty.desc}</EmptyDescription>
+            </Empty>
+          )}
+
+          {isNoResults && (
+            <Empty>
+              <EmptyMedia variant="icon">
+                <SearchX className="size-6" aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>{t.browse.noResults.title}</EmptyTitle>
+              <EmptyDescription>{t.browse.noResults.desc}</EmptyDescription>
+              <EmptyContent>
+                <Button variant="outline" onClick={clearSearch}>
+                  {t.browse.noResults.clear}
+                </Button>
+              </EmptyContent>
+            </Empty>
+          )}
+
+          {hasData && !isInitialError && medicines.length > 0 && (
+            <>
+              {isError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{t.errors.query}</AlertDescription>
+                </Alert>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {medicines.map((m) => (
+                  <Card key={m.id} className="flex min-w-0 flex-col">
+                    <CardHeader className="p-5 pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <CardTitle className="min-w-0 break-words text-sm font-semibold leading-snug text-brand-navy">
+                          {m.name}
+                        </CardTitle>
+                        <span className="shrink-0 rounded-full bg-brand-teal-soft px-2.5 py-1 text-xs font-medium text-brand-teal-deep">
+                          {priceFmt.format(Number(m.price))} {t.browse.jod}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 space-y-2 p-5 pt-3">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{t.browse.card.provider}:</span>{" "}
+                        {m.pharmacyName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{t.browse.card.city}:</span>{" "}
+                        {m.pharmacyCity}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{t.browse.card.quantity}:</span>{" "}
+                        {numberFmt.format(m.quantity)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{t.browse.card.expires}:</span>{" "}
+                        {dateFmt.format(new Date(m.expiryDate + "T00:00:00Z"))}
+                      </p>
+                      {m.description ? (
+                        <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                          {m.description}
+                        </p>
+                      ) : null}
+                    </CardContent>
+                    <CardFooter className="p-5 pt-3">
+                      <Button
+                        onClick={(e) => {
+                          openerRef.current = e.currentTarget;
+                          openDialog(m);
+                        }}
+                        aria-label={t.browse.card.requestAria.replace("{name}", m.name)}
+                        className="w-full bg-brand-teal-deep text-white hover:bg-brand-navy"
+                      >
+                        {t.browse.card.request}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {requestSuccess && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-          {requestSuccess}
-        </div>
-      )}
-
-      {/* Request modal */}
-      {requesting && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">إرسال طلب</h3>
-              <button onClick={() => { setRequesting(null); setRequestError(""); setIdemKey(null); }} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
-            </div>
-            <div className="p-6">
-              <p className="text-sm text-slate-700 mb-1 font-medium">{requesting.name}</p>
-              <p className="text-xs text-slate-500 mb-4">من: {requesting.pharmacyName} — {requesting.pharmacyCity}</p>
-              <p className="text-xs text-slate-500 mb-1">متاح: {requesting.quantity} وحدة — السعر: {formatPrice(requesting.price)} JOD</p>
-
-              {requestError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg mb-3">{requestError}</p>
-              )}
-
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">الكمية المطلوبة</label>
-                <input
-                  type="number"
-                  min="1"
-                  max={requesting.quantity}
-                  value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  dir="ltr"
-                />
+      <Dialog open={!!selected} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent
+          className="max-h-[85dvh] max-w-sm overflow-y-auto bg-background sm:max-w-md"
+          aria-modal="true"
+          closeLabel={t.browse.dialog.close}
+          onCloseAutoFocus={restoreToOpener}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            qtyInputRef.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t.browse.dialog.title}</DialogTitle>
+            <DialogDescription>
+              {t.browse.dialog.description.replace("{name}", selected?.name ?? "")}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            {dialogError && (
+              <Alert variant="destructive">
+                <AlertDescription>{dialogError}</AlertDescription>
+              </Alert>
+            )}
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="min-w-0 space-y-1">
+                <p className="text-xs text-muted-foreground">{t.browse.dialog.provider}</p>
+                <p className="break-words text-sm font-medium text-foreground">
+                  {selected?.pharmacyName} <span className="text-muted-foreground">— {selected?.pharmacyCity}</span>
+                </p>
               </div>
-
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={() => {
-                    if (submittingRef.current) return;
-                    submittingRef.current = true;
-                    sendMut.mutate(undefined, {
-                      onSettled: () => { submittingRef.current = false; },
-                    });
-                  }}
-                  disabled={sendMut.isPending || notVerified}
-                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
-                >
-                  {notVerified ? "الإرسال متاح بعد اعتماد الصيدلية" : sendMut.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
-                </button>
-                <button
-                  onClick={() => { setRequesting(null); setRequestError(""); setIdemKey(null); }}
-                  className="px-4 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors"
-                >
-                  إلغاء
-                </button>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t.browse.dialog.available}</p>
+                <p className="text-sm font-medium text-foreground">{numberFmt.format(selected?.quantity ?? 0)}</p>
+                <p className="text-xs font-medium text-brand-teal-deep">
+                  {priceFmt.format(Number(selected?.price ?? 0))} {t.browse.jod} · {t.browse.dialog.price}
+                </p>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-              <div className="flex justify-between"><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-16" /></div>
-              <Skeleton className="h-3 w-40" />
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-8 w-full rounded-lg" />
-            </div>
-          ))}
-        </div>
-      ) : isError ? (
-        <Alert variant="destructive">
-          <p>{t.errors.query}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>{t.errors.retry}</Button>
-        </Alert>
-      ) : !medicines?.length ? (
-        <Empty>
-          <EmptyMedia variant="icon">
-            {search ? <SearchX className="size-6" /> : <Package className="size-6" />}
-          </EmptyMedia>
-          <EmptyTitle>{search ? `${t.empty.browseSearch} "${search}"` : t.empty.browse}</EmptyTitle>
-          <EmptyDescription>{search ? "جرّب كلمات بحث مختلفة" : "ستظهر الأدوية المتاحة هنا فور إضافتها من قبل الصيدليات الأخرى"}</EmptyDescription>
-        </Empty>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {medicines.map((m) => (
-            <div key={m.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <h4 className="font-semibold text-slate-800 text-sm leading-snug">{m.name}</h4>
-                <span className="text-sm font-bold text-emerald-700 whitespace-nowrap mr-2">
-                  {formatPrice(m.price)} JOD
-                </span>
-              </div>
-
-              <div className="space-y-1.5 mb-4">
-                <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">الصيدلية:</span> {m.pharmacyName}
-                </p>
-                <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">المدينة:</span> {m.pharmacyCity}
-                </p>
-                <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">الكمية المتاحة:</span> {m.quantity} وحدة
-                </p>
-                <p className="text-xs text-slate-500">
-                  <span className="font-medium text-slate-600">الصلاحية حتى:</span> {m.expiryDate}
-                </p>
-              </div>
-
-              {m.description && (
-                <p className="text-xs text-slate-400 mb-3 line-clamp-2">{m.description}</p>
-              )}
-
-              <button
-                onClick={() => {
-                  setRequesting(m);
-                  setQty("1");
-                  setRequestError("");
-                  setIdemKey(crypto.randomUUID());
+            <div className="space-y-1.5">
+              <Label htmlFor="req-qty">{t.browse.dialog.qtyLabel}</Label>
+              <Input
+                id="req-qty"
+                name="requestedQuantity"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                ref={qtyInputRef}
+                dir="ltr"
+                value={qty}
+                onChange={(e) => {
+                  setQty(e.target.value);
+                  if (qtyError) setQtyError("");
                 }}
-                className="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
-              >
-                طلب هذا الدواء
-              </button>
+                placeholder={t.browse.dialog.qtyPlaceholder}
+                aria-invalid={!!qtyError}
+                aria-describedby={qtyError ? "req-qty-error" : undefined}
+              />
+              {qtyError && (
+                <p id="req-qty-error" className="text-xs text-destructive">
+                  {qtyError}
+                </p>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button type="button" variant="outline" onClick={closeDialog} disabled={sendMut.isPending}>
+                {t.browse.dialog.cancel}
+              </Button>
+              <Button
+                type="submit"
+                disabled={sendMut.isPending || !idemKey}
+                className="bg-brand-teal-deep text-white hover:bg-brand-navy"
+              >
+                {sendMut.isPending ? t.browse.dialog.submitting : t.browse.dialog.submit}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

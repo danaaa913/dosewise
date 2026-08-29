@@ -33,9 +33,9 @@ async function registerPharmacy() {
   return { email, agent };
 }
 
-async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: number; expiryDate: string }> = {}) {
+async function addMedicine(agent: request.Agent, overrides: Partial<{ quantity: number; expiryDate: string; name: string }> = {}) {
   const res = await agent.post("/api/medicines/add").send({
-    name: "Ibuprofen 400mg (INV test)",
+    name: overrides.name ?? "Ibuprofen 400mg (INV test)",
     quantity: 10,
     price: 3,
     expiryDate: "2099-01-01",
@@ -376,5 +376,95 @@ describe("EXP-002: market expiry boundary — expiring today is still valid", ()
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
     expect(res.body.map((m: { id: number }) => m.id)).toContain(med.id);
+  });
+});
+
+describe("SORT-001: deterministic marketplace ordering", () => {
+  it("orders by earliest expiry first regardless of name", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+
+    const latest = await addMedicine(owner.agent, { name: "Omega", expiryDate: "2031-01-01" });
+    const earliest = await addMedicine(owner.agent, { name: "Alpha", expiryDate: "2029-01-01" });
+    const middle = await addMedicine(owner.agent, { name: "Beta", expiryDate: "2030-01-01" });
+
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const idx = (id: number) => ids.indexOf(id);
+    expect(idx(earliest.id)).toBeLessThan(idx(middle.id));
+    expect(idx(middle.id)).toBeLessThan(idx(latest.id));
+  });
+
+  it("orders by name ascending when expiry dates are equal", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+
+    const zeta = await addMedicine(owner.agent, { name: "Zeta", expiryDate: "2030-06-01" });
+    const alpha = await addMedicine(owner.agent, { name: "Alpha", expiryDate: "2030-06-01" });
+
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const idx = (id: number) => ids.indexOf(id);
+    expect(idx(alpha.id)).toBeLessThan(idx(zeta.id));
+  });
+
+  it("uses medicine id ascending as tie-breaker when expiry and name are equal", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+
+    const first = await addMedicine(owner.agent, { name: "Tie Breaker", expiryDate: "2030-06-01" });
+    const second = await addMedicine(owner.agent, { name: "Tie Breaker", expiryDate: "2030-06-01" });
+
+    const res = await viewer.agent.get("/api/medicines/available");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const idx = (id: number) => ids.indexOf(id);
+    expect(idx(first.id)).toBeLessThan(idx(second.id));
+  });
+
+  it.each([
+    ["IBUPROFEN", "IBUPROFEN"],
+    ["mixed case", "IbUpRoFeN"],
+    ["lowercase", "ibuprofen"],
+  ])("search by name is case-insensitive (%s)", async (_label, query) => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const med = await addMedicine(owner.agent, { quantity: 5 });
+
+    const res = await viewer.agent.get(`/api/medicines/available?search=${encodeURIComponent(query)}`);
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    expect(ids).toContain(med.id);
+  });
+
+  it("trims surrounding whitespace from the search query", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const med = await addMedicine(owner.agent, { quantity: 5 });
+
+    const res = await viewer.agent.get(`/api/medicines/available?search=${encodeURIComponent("   Ibuprofen   ")}`);
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    expect(ids).toContain(med.id);
+  });
+
+  it("preserves Commit B rules while searching: expired or 0-quantity or own listings are never returned", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+
+    const valid = await addMedicine(owner.agent, { quantity: 5 });
+    const expired = await addMedicine(owner.agent, { quantity: 5, expiryDate: "2020-01-01" });
+    const empty = await addMedicine(owner.agent, { quantity: 0 });
+    const own = await addMedicine(viewer.agent, { quantity: 5 });
+
+    const res = await viewer.agent.get("/api/medicines/available?search=Ibuprofen");
+    expect(res.status).toBe(200);
+    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    expect(ids).toContain(valid.id);
+    expect(ids).not.toContain(expired.id);
+    expect(ids).not.toContain(empty.id);
+    expect(ids).not.toContain(own.id);
   });
 });

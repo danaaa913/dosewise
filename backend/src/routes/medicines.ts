@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, medicinesTable, pharmaciesTable } from "../db/index.js";
-import { eq, and, gt, gte, ne } from "drizzle-orm";
+import { eq, and, asc, gt, gte, ne } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 import { todayUtc } from "../lib/expiry.js";
@@ -55,10 +55,15 @@ router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Pr
       eq(pharmaciesTable.verificationStatus, "approved"),
       eq(pharmaciesTable.isActive, true),
       ne(medicinesTable.pharmacyId, req.session.pharmacyId!),
-    ));
+    ))
+    .orderBy(
+      asc(medicinesTable.expiryDate),
+      asc(medicinesTable.name),
+      asc(medicinesTable.id),
+    );
 
   const searched = search
-    ? medicines.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
+    ? medicines.filter(m => m.name.toLowerCase().includes(search.trim().toLowerCase()))
     : medicines;
 
   res.json(searched.map(m => ({
