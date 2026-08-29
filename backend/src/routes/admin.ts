@@ -1,8 +1,8 @@
 ﻿import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable, notificationsTable } from "../db/index.js";
+import { db, adminsTable, pharmaciesTable, medicinesTable, requestsTable, notificationsTable, auditLogsTable } from "../db/index.js";
 import { logAudit } from "../lib/audit.js";
-import { eq, count } from "drizzle-orm";
+import { eq, count, and, desc } from "drizzle-orm";
 import { AdminLoginBody, VerificationDecisionBody } from "../zod/schemas.js";
 import { loginLimiter } from "../lib/rate-limit.js";
 
@@ -144,6 +144,49 @@ router.get("/admin/stats", requireAdmin, async (_req, res): Promise<void> => {
     totalPharmacies: pharmacyCount.count, totalMedicines: medicineCount.count,
     totalRequests: requestCount.count, activeSubscriptions: activeSubCount.count,
     pendingRequests: pendingReqs.count,
+  });
+});
+
+function parseAuditDetails(details: string | null): unknown {
+  if (details === null) return null;
+  try { return JSON.parse(details); } catch { return details; }
+}
+
+router.get("/admin/audit-logs", requireAdmin, async (req, res): Promise<void> => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+
+  const filters = [];
+  if (typeof req.query.action === "string" && req.query.action) {
+    filters.push(eq(auditLogsTable.action, req.query.action));
+  }
+  if (typeof req.query.targetType === "string" && req.query.targetType) {
+    filters.push(eq(auditLogsTable.targetType, req.query.targetType));
+  }
+  const targetId = Number(req.query.targetId);
+  if (Number.isInteger(targetId) && targetId > 0) {
+    filters.push(eq(auditLogsTable.targetId, targetId));
+  }
+
+  const rows = await db.select().from(auditLogsTable)
+    .where(filters.length ? and(...filters) : undefined)
+    .orderBy(desc(auditLogsTable.createdAt), desc(auditLogsTable.id))
+    .limit(limit)
+    .offset((page - 1) * limit);
+
+  res.json({
+    data: rows.map((row) => ({
+      id: row.id,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      actorLabel: row.actorLabel,
+      action: row.action,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      details: parseAuditDetails(row.details),
+      createdAt: row.createdAt.toISOString(),
+    })),
+    pagination: { page, limit },
   });
 });
 
