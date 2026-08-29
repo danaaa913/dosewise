@@ -29,6 +29,13 @@
       "when": 1788009407373,
       "tag": "0003_fearless_synch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788029302635,
+      "tag": "0004_busy_tarantula",
+      "breakpoints": true
     }
   ]
 }
