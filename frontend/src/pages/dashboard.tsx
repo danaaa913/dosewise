@@ -47,19 +47,30 @@ export default function DashboardPage() {
     isError: errSent,
     refetch: refSent,
   } = useQuery({
-    queryKey: ["requests-sent"],
-    queryFn: api.requests.sent,
+    queryKey: ["requests-sent", "dashboard"],
+    queryFn: () => api.requests.sent({ page: 1, limit: 1 }),
     retry: false,
   });
 
   const {
-    data: receivedRequests,
+    data: receivedStats,
     isPending: pendingRecv,
     isError: errRecv,
     refetch: refRecv,
   } = useQuery({
-    queryKey: ["requests-received"],
-    queryFn: api.requests.received,
+    queryKey: ["requests-received", "dashboard"],
+    queryFn: () => api.requests.received({ page: 1, limit: 1 }),
+    retry: false,
+  });
+
+  const {
+    data: pendingList,
+    isPending: pendingPanelList,
+    isError: errPanelList,
+    refetch: refPanelList,
+  } = useQuery({
+    queryKey: ["requests-received", "dashboard", "pending"],
+    queryFn: () => api.requests.received({ page: 1, limit: 5, status: "pending" }),
     retry: false,
   });
 
@@ -85,18 +96,18 @@ export default function DashboardPage() {
     retry: false,
   });
 
-  const hasAnyError = errMed || errSent || errRecv || errSub || errNotif;
+  const hasAnyError = errMed || errSent || errRecv || errPanelList || errSub || errNotif;
 
   const handleRetryAll = async () => {
     setIsRetrying(true);
     try {
-      await Promise.all([refMed(), refSent(), refRecv(), refSub(), refNotif()]);
+      await Promise.all([refMed(), refSent(), refRecv(), refPanelList(), refSub(), refNotif()]);
     } finally {
       setIsRetrying(false);
     }
   };
 
-  const pendingReceived = receivedRequests?.filter((r) => r.status === "pending") ?? [];
+  const pendingReceived = pendingList?.data ?? [];
 
   return (
     <Layout title={t.nav.dashboard}>
@@ -247,13 +258,13 @@ export default function DashboardPage() {
               <span className="inline-flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal-deep">
                 <ArrowLeftRight className="size-5" aria-hidden="true" />
               </span>
-              {pendingRecv && !receivedRequests ? (
+              {pendingRecv && !receivedStats ? (
                 <>
                   <Skeleton className="h-8 w-14" />
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-3 w-20" />
                 </>
-              ) : errRecv && !receivedRequests ? (
+              ) : errRecv && !receivedStats ? (
                 <>
                   <p className="text-2xl font-bold text-brand-navy">—</p>
                   <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.incoming}</p>
@@ -262,13 +273,13 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <p className="text-2xl font-bold tracking-tight text-brand-navy">
-                    {numberFormatter.format(receivedRequests?.length ?? 0)}
+                    {numberFormatter.format(receivedStats?.pagination.total ?? 0)}
                   </p>
                   <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.incoming}</p>
                   <p className="text-xs text-muted-foreground">
                     {t.dashboard.kpi.incomingSub.replace(
                       "{count}",
-                      numberFormatter.format(pendingReceived.length)
+                      numberFormatter.format(receivedStats?.pending ?? 0)
                     )}
                   </p>
                 </>
@@ -301,13 +312,13 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <p className="text-2xl font-bold tracking-tight text-brand-navy">
-                    {numberFormatter.format(sentRequests?.length ?? 0)}
+                    {numberFormatter.format(sentRequests?.pagination.total ?? 0)}
                   </p>
                   <p className="text-sm font-medium text-brand-navy">{t.dashboard.kpi.sent}</p>
                   <p className="text-xs text-muted-foreground">
                     {t.dashboard.kpi.sentSub.replace(
                       "{count}",
-                      numberFormatter.format(sentRequests?.filter((r) => r.status === "pending").length ?? 0)
+                      numberFormatter.format(sentRequests?.pending ?? 0)
                     )}
                   </p>
                 </>
@@ -367,12 +378,12 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            {pendingRecv && !receivedRequests ? (
+            {pendingPanelList && !pendingList ? (
               <div className="space-y-3">
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-12 w-full" />
               </div>
-            ) : errRecv && !receivedRequests ? (
+            ) : errPanelList && !pendingList ? (
               <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.pendingFailed}</p>
             ) : pendingReceived.length === 0 ? (
               <div className="py-8 text-center">
@@ -381,7 +392,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {pendingReceived.slice(0, 5).map((req) => (
+                {pendingReceived.map((req) => (
                   <div
                     key={req.id}
                     className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"

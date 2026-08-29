@@ -657,13 +657,13 @@ describe("D1-SNAP: sent/received expose the stored snapshot and stable ordering"
 
     const sent = await requester.agent.get("/api/requests/sent");
     expect(sent.status).toBe(200);
-    const sentRow = sent.body.find((r: any) => r.id === send.body.id);
+    const sentRow = sent.body.data.find((r: any) => r.id === send.body.id);
     expect(sentRow.medicineName).toBe("Paracetamol 500mg (EXC test)");
     expect(sentRow.unitPrice).toBe("1.25");
 
     const received = await provider.agent.get("/api/requests/received");
     expect(received.status).toBe(200);
-    const receivedRow = received.body.find((r: any) => r.id === send.body.id);
+    const receivedRow = received.body.data.find((r: any) => r.id === send.body.id);
     expect(receivedRow.medicineName).toBe("Paracetamol 500mg (EXC test)");
     expect(receivedRow.unitPrice).toBe("1.25");
   });
@@ -689,13 +689,132 @@ describe("D1-SNAP: sent/received expose the stored snapshot and stable ordering"
     ]);
     for (const res of entries) {
       expect(res.status).toBe(200);
-      const ids: number[] = res.body.map((r: any) => r.id);
+      const ids: number[] = res.body.data.map((r: any) => r.id);
       const i1 = ids.indexOf(r1.body.id);
       const i2 = ids.indexOf(r2.body.id);
       expect(i1).toBeGreaterThan(-1);
       expect(i2).toBeGreaterThan(-1);
       expect(i2).toBeLessThan(i1);
     }
+  });
+});
+
+describe("PERF-003: request lists paginate, filter by status, and expose pending counts", () => {
+  async function seedThree(provider: Awaited<ReturnType<typeof registerPharmacy>>, requester: Awaited<ReturnType<typeof registerPharmacy>>, setupAfter?: (idsAt: number[]) => Promise<void>) {
+    const medA = await addMedicine(provider.agent, { quantity: 5 });
+    const medB = await addMedicine(provider.agent, { quantity: 5 });
+    const medC = await addMedicine(provider.agent, { quantity: 5 });
+    const a = await sendRequest(requester.agent, medA.id, 1);
+    const b = await sendRequest(requester.agent, medB.id, 1);
+    const c = await sendRequest(requester.agent, medC.id, 1);
+    const ids = [a.body.id, b.body.id, c.body.id] as number[];
+    createdRequestIds.push(...ids);
+    if (setupAfter) await setupAfter(ids);
+    return ids;
+  }
+
+  async function seededPharmacies() {
+    const provider = await registerPharmacy();
+    const requester = await registerPharmacy();
+    return { provider, requester };
+  }
+
+  it("returns the { data, pagination, pending } envelope with joined names", async () => {
+    const { requester, provider } = await seededPharmacies();
+    const ids = await seedThree(provider, requester);
+    expect(ids).toHaveLength(3);
+    const sent = await requester.agent.get("/api/requests/sent");
+    expect(sent.status).toBe(200);
+    expect(Array.isArray(sent.body.data)).toBe(true);
+    expect(sent.body.data).toHaveLength(3);
+    expect(sent.body.pagination).toEqual({ page: 1, limit: 20, total: 3 });
+    expect(sent.body.pending).toBe(3);
+    for (const r of sent.body.data) {
+      expect(r.requesterName).toEqual(expect.any(String));
+      expect(r.providerName).toEqual(expect.any(String));
+    }
+    const received = await provider.agent.get("/api/requests/received");
+    expect(received.body.pagination.total).toBe(3);
+    expect(received.body.pending).toBe(3);
+    for (const r of received.body.data) {
+      expect(r.requesterName).toEqual(expect.any(String));
+      expect(r.providerName).toEqual(expect.any(String));
+    }
+  });
+
+  it("paginates by limit/page in descending order, total preserved on boundary pages", async () => {
+    const { requester, provider } = await seededPharmacies();
+    const ids = await seedThree(provider, requester);
+    const first = await requester.agent.get("/api/requests/sent?limit=1&page=1");
+    expect(first.body.data).toHaveLength(1);
+    expect(first.body.pagination).toEqual({ page: 1, limit: 1, total: 3 });
+    const second = await requester.agent.get("/api/requests/sent?limit=1&page=2");
+    expect(second.body.data).toHaveLength(1);
+    expect(second.body.pagination).toEqual({ page: 2, limit: 1, total: 3 });
+    expect(first.body.data[0].id).not.toBe(second.body.data[0].id);
+    expect(first.body.data[0].id).toBe(ids[2]);
+
+    const third = await requester.agent.get("/api/requests/sent?limit=1&page=4");
+    expect(third.body.data).toHaveLength(0);
+    expect(third.body.pagination).toEqual({ page: 4, limit: 1, total: 3 });
+    expect(third.body.pending).toBe(3);
+  });
+
+  it("filters by status and keeps pending independent of page and filter", async () => {
+    const { requester, provider } = await seededPharmacies();
+    const ids = await seedThree(provider, requester, async (created) => {
+      const res = await provider.agent.post(`/api/requests/${created[0]}/reject`);
+      expect(res.status).toBe(200);
+    });
+    expect(ids).toHaveLength(3);
+    const all = await requester.agent.get("/api/requests/sent?limit=1&page=1");
+    expect(all.body.pagination.total).toBe(3);
+    expect(all.body.pending).toBe(2);
+
+    const pending = await requester.agent.get("/api/requests/sent?status=pending&limit=10");
+    expect(pending.body.data).toHaveLength(2);
+    expect(pending.body.pagination.total).toBe(2);
+    expect(pending.body.pending).toBe(2);
+
+    const rejected = await requester.agent.get("/api/requests/sent?status=rejected&limit=10");
+    expect(rejected.body.data).toHaveLength(1);
+    expect(rejected.body.pagination.total).toBe(1);
+    expect(rejected.body.pending).toBe(2);
+
+    const bogus = await requester.agent.get("/api/requests/sent?status=bogus&limit=10");
+    expect(bogus.body.pagination.total).toBe(3);
+    expect(bogus.body.pending).toBe(2);
+  });
+
+  it("clamps limit strictly to 1..100 and ignores invalid values", async () => {
+    const { requester, provider } = await seededPharmacies();
+    await seedThree(provider, requester);
+    const zero = await requester.agent.get("/api/requests/sent?limit=0");
+    expect(zero.body.data).toHaveLength(1);
+    expect(zero.body.pagination.limit).toBe(1);
+
+    const negative = await requester.agent.get("/api/requests/sent?limit=-5");
+    expect(negative.body.data).toHaveLength(1);
+    expect(negative.body.pagination.limit).toBe(1);
+
+    const huge = await requester.agent.get("/api/requests/sent?limit=500");
+    expect(huge.body.data).toHaveLength(3);
+    expect(huge.body.pagination.limit).toBe(100);
+
+    const garbage = await requester.agent.get("/api/requests/sent?limit=abc");
+    expect(garbage.body.data).toHaveLength(3);
+    expect(garbage.body.pagination.limit).toBe(20);
+
+    const noParams = await requester.agent.get("/api/requests/sent");
+    expect(noParams.body.pagination).toEqual({ page: 1, limit: 20, total: 3 });
+  });
+
+  it("clamps page to >=1", async () => {
+    const { requester, provider } = await seededPharmacies();
+    const ids = await seedThree(provider, requester);
+    const res = await requester.agent.get("/api/requests/sent?page=0&limit=1");
+    expect(res.body.pagination.page).toBe(1);
+    expect(res.body.data[0].id).toBe(ids[2]);
   });
 });
 
@@ -851,10 +970,10 @@ describe("D1-AUTH: request authorization matrix", () => {
     const received = await ctx.provider.agent.get("/api/requests/received");
     const bystanderSent = await ctx.bystander.agent.get("/api/requests/sent");
     const bystanderReceived = await ctx.bystander.agent.get("/api/requests/received");
-    expect(sent.body.map((r: any) => r.id)).toContain(ctx.requestId);
-    expect(received.body.map((r: any) => r.id)).toContain(ctx.requestId);
-    expect(bystanderSent.body).toHaveLength(0);
-    expect(bystanderReceived.body).toHaveLength(0);
+    expect(sent.body.data.map((r: any) => r.id)).toContain(ctx.requestId);
+    expect(received.body.data.map((r: any) => r.id)).toContain(ctx.requestId);
+    expect(bystanderSent.body.data).toHaveLength(0);
+    expect(bystanderReceived.body.data).toHaveLength(0);
   });
 
   it("operating on a foreign request id neither mutates nor leaks details", async () => {

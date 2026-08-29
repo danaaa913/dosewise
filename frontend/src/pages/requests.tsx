@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Inbox, Send } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
   Tabs,
   TabsContent,
@@ -30,6 +39,20 @@ import { cn } from "@/lib/utils";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+const PAGE_SIZE = 20;
+
+function range(start: number, end: number): number[] {
+  const len = end - start + 1;
+  return Array.from({ length: len }, (_, i) => start + i);
+}
+
+function buildPageItems(current: number, totalPages: number): (number | "…")[] {
+  if (totalPages <= 7) return range(1, totalPages);
+  if (current <= 4) return [...range(1, 5), "…", totalPages];
+  if (current >= totalPages - 3) return [1, "…", ...range(totalPages - 4, totalPages)];
+  return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
+}
 
 type TabKey = "received" | "sent";
 
@@ -95,6 +118,7 @@ export default function RequestsPage() {
   const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
 
   const [tab, setTab] = useState<TabKey>(parseTabFromUrl);
+  const [pages, setPages] = useState<Record<TabKey, number>>({ received: 1, sent: 1 });
 
   useEffect(() => {
     const handlePopState = () => {
@@ -107,6 +131,7 @@ export default function RequestsPage() {
   const handleTabChange = (newTab: TabKey) => {
     if (newTab === tab) return;
     setTab(newTab);
+    setPages((prev) => ({ ...prev, [newTab]: 1 }));
     const url = new URL(window.location.href);
     url.searchParams.set("tab", newTab);
     window.history.pushState({}, "", url.toString());
@@ -132,16 +157,28 @@ export default function RequestsPage() {
   };
 
   const { data: received, isLoading: loadingReceived, isError: errReceived, refetch: refetchReceived } = useQuery({
-    queryKey: ["requests-received"],
-    queryFn: api.requests.received,
+    queryKey: ["requests-received", pages.received],
+    queryFn: () => api.requests.received({ page: pages.received, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
     refetchInterval: 15_000,
   });
 
   const { data: sent, isLoading: loadingSent, isError: errSent, refetch: refetchSent } = useQuery({
-    queryKey: ["requests-sent"],
-    queryFn: api.requests.sent,
+    queryKey: ["requests-sent", pages.sent],
+    queryFn: () => api.requests.sent({ page: pages.sent, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
     refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((received?.pagination.total ?? 0) / PAGE_SIZE));
+    if (pages.received > totalPages) setPages((prev) => ({ ...prev, received: totalPages }));
+  }, [pages.received, received]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((sent?.pagination.total ?? 0) / PAGE_SIZE));
+    if (pages.sent > totalPages) setPages((prev) => ({ ...prev, sent: totalPages }));
+  }, [pages.sent, sent]);
 
   const acceptMut = useMutation({
     mutationFn: (id: number) => api.requests.accept(id),
@@ -247,13 +284,20 @@ export default function RequestsPage() {
     };
   })();
 
-  const pendingCount = received?.filter((r) => r.status === "pending").length ?? 0;
+  const pendingCount = received?.pending ?? 0;
 
   const renderRequests = (panel: TabKey) => {
     const loading = panel === "received" ? loadingReceived : loadingSent;
     const error = panel === "received" ? errReceived : errSent;
     const refetch = panel === "received" ? refetchReceived : refetchSent;
-    const list: ExchangeRequest[] = panel === "received" ? (received ?? []) : (sent ?? []);
+    const page = panel === "received" ? pages.received : pages.sent;
+    const total = panel === "received"
+      ? (received?.pagination.total ?? 0)
+      : (sent?.pagination.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const setPanelPage = (next: number) =>
+      setPages((prev) => ({ ...prev, [panel]: next }));
+    const list: ExchangeRequest[] = panel === "received" ? (received?.data ?? []) : (sent?.data ?? []);
 
     if (loading) {
       return (
@@ -405,6 +449,52 @@ export default function RequestsPage() {
             </div>
           );
         })}
+        {total > PAGE_SIZE && (
+          <Pagination className="pt-2">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page > 1) setPanelPage(page - 1);
+                  }}
+                  className={page <= 1 ? "pointer-events-none opacity-50" : undefined}
+                />
+              </PaginationItem>
+              {buildPageItems(page, totalPages).map((item, index) =>
+                item === "…" ? (
+                  <PaginationItem key={`ellipsis-${index}`}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={item}>
+                    <PaginationLink
+                      href="#"
+                      isActive={item === page}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPanelPage(item);
+                      }}
+                    >
+                      {item}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page < totalPages) setPanelPage(page + 1);
+                  }}
+                  className={page >= totalPages ? "pointer-events-none opacity-50" : undefined}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        )}
       </div>
     );
   };

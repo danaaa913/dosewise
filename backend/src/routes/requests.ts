@@ -1,6 +1,7 @@
-﻿import { Router, type IRouter } from "express";
-import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable, type Request } from "../db/index.js";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+﻿import { Router, type IRouter, type Request, type Response } from "express";
+import { db, requestsTable, medicinesTable, pharmaciesTable, notificationsTable, REQUEST_STATUSES, type Request as RequestRow } from "../db/index.js";
+import { eq, and, gte, desc, count, sql, type Column } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { SendRequestBody, AcceptRequestParams, RejectRequestParams, RequestIdParams } from "../zod/schemas.js";
 import { canTransition, fail, type RequestStatus } from "../lib/request-state.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
@@ -9,6 +10,80 @@ import { logAudit } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+const requesterPharmacyAlias = alias(pharmaciesTable, "requester");
+const providerPharmacyAlias = alias(pharmaciesTable, "provider");
+
+interface RequestListQuery {
+  page: number;
+  limit: number;
+  status: RequestStatus | undefined;
+}
+
+function parseRequestListQuery(req: Request): RequestListQuery {
+  const page = Number.isFinite(Number(req.query.page)) ? Math.max(1, Math.floor(Number(req.query.page))) : 1;
+  const limit = Number.isFinite(Number(req.query.limit))
+    ? Math.min(100, Math.max(1, Math.floor(Number(req.query.limit))))
+    : 20;
+  const rawStatus = typeof req.query.status === "string" ? req.query.status : "";
+  const status = (REQUEST_STATUSES as readonly string[]).includes(rawStatus)
+    ? (rawStatus as RequestStatus)
+    : undefined;
+  return { page, limit, status };
+}
+
+type RequestScopeColumn = Column;
+
+async function respondWithRequestList(
+  req: Request,
+  res: Response,
+  scopeColumn: RequestScopeColumn,
+): Promise<void> {
+  const query = parseRequestListQuery(req);
+
+  const scope = eq(scopeColumn, req.session.pharmacyId!);
+  const statusFilter = query.status ? eq(requestsTable.status, query.status) : undefined;
+  const conditions = statusFilter ? and(scope, statusFilter) : scope;
+
+  const [totalRow] = await db.select({ count: count() })
+    .from(requestsTable)
+    .where(conditions);
+
+  const [pendingRow] = await db.select({ count: count() })
+    .from(requestsTable)
+    .where(and(scope, eq(requestsTable.status, "pending")));
+
+  const requests = await db
+    .select({
+      id: requestsTable.id, requesterPharmacyId: requestsTable.requesterPharmacyId,
+      providerPharmacyId: requestsTable.providerPharmacyId, medicineId: requestsTable.medicineId,
+      requestedQuantity: requestsTable.requestedQuantity, unitPrice: requestsTable.unitPrice,
+      status: requestsTable.status, requestDate: requestsTable.requestDate, responseDate: requestsTable.responseDate,
+      medicineName: requestsTable.medicineName,
+      requesterName: requesterPharmacyAlias.name, providerName: providerPharmacyAlias.name,
+    })
+    .from(requestsTable)
+    .leftJoin(requesterPharmacyAlias, eq(requesterPharmacyAlias.id, requestsTable.requesterPharmacyId))
+    .leftJoin(providerPharmacyAlias, eq(providerPharmacyAlias.id, requestsTable.providerPharmacyId))
+    .where(conditions)
+    .orderBy(desc(requestsTable.requestDate), desc(requestsTable.id))
+    .limit(query.limit)
+    .offset((query.page - 1) * query.limit);
+
+  res.json({
+    data: requests.map((r) => ({
+      id: r.id, requesterPharmacyId: r.requesterPharmacyId,
+      providerPharmacyId: r.providerPharmacyId, medicineId: r.medicineId,
+      requestedQuantity: r.requestedQuantity, unitPrice: r.unitPrice,
+      status: r.status, requestDate: r.requestDate.toISOString(),
+      responseDate: r.responseDate ? r.responseDate.toISOString() : null,
+      medicineName: r.medicineName,
+      requesterName: r.requesterName ?? "", providerName: r.providerName ?? "",
+    })),
+    pagination: { page: query.page, limit: query.limit, total: totalRow.count },
+    pending: pendingRow.count,
+  });
+}
 
 interface ActionOutcome {
   status: number;
@@ -25,7 +100,7 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
     fail(res, 400, undefined, "Idempotency-Key header is required (max 255 chars)"); return;
   }
 
-  const serializeRequest = (existing: Request) => ({
+  const serializeRequest = (existing: RequestRow) => ({
     id: existing.id, requesterPharmacyId: existing.requesterPharmacyId,
     providerPharmacyId: existing.providerPharmacyId, medicineId: existing.medicineId,
     requestedQuantity: existing.requestedQuantity, unitPrice: existing.unitPrice,
@@ -95,7 +170,7 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
     fail(res, 409, "DUPLICATE_PENDING_REQUEST", "A pending request for this medicine already exists"); return;
   }
 
-  let request: Request;
+  let request: RequestRow;
   try {
     const inserted = await db.transaction(async (tx) => {
       const [insertedRow] = await tx.insert(requestsTable).values({
@@ -174,53 +249,11 @@ router.post("/requests/send", requireApprovedPharmacy, async (req, res): Promise
 });
 
 router.get("/requests/sent", requireApprovedPharmacy, async (req, res): Promise<void> => {
-  const requests = await db
-    .select({
-      id: requestsTable.id, requesterPharmacyId: requestsTable.requesterPharmacyId,
-      providerPharmacyId: requestsTable.providerPharmacyId, medicineId: requestsTable.medicineId,
-      requestedQuantity: requestsTable.requestedQuantity, unitPrice: requestsTable.unitPrice,
-      status: requestsTable.status, requestDate: requestsTable.requestDate, responseDate: requestsTable.responseDate,
-      medicineName: requestsTable.medicineName,
-    })
-    .from(requestsTable)
-    .where(eq(requestsTable.requesterPharmacyId, req.session.pharmacyId!))
-    .orderBy(desc(requestsTable.requestDate), desc(requestsTable.id));
-
-  const withNames = await Promise.all(requests.map(async (r) => {
-    const [requester] = await db.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, r.requesterPharmacyId));
-    const [provider] = await db.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, r.providerPharmacyId));
-    return {
-      ...r, requestDate: r.requestDate.toISOString(),
-      responseDate: r.responseDate ? r.responseDate.toISOString() : null,
-      requesterName: requester?.name ?? "", providerName: provider?.name ?? "",
-    };
-  }));
-  res.json(withNames);
+  await respondWithRequestList(req, res, requestsTable.requesterPharmacyId);
 });
 
 router.get("/requests/received", requireApprovedPharmacy, async (req, res): Promise<void> => {
-  const requests = await db
-    .select({
-      id: requestsTable.id, requesterPharmacyId: requestsTable.requesterPharmacyId,
-      providerPharmacyId: requestsTable.providerPharmacyId, medicineId: requestsTable.medicineId,
-      requestedQuantity: requestsTable.requestedQuantity, unitPrice: requestsTable.unitPrice,
-      status: requestsTable.status, requestDate: requestsTable.requestDate, responseDate: requestsTable.responseDate,
-      medicineName: requestsTable.medicineName,
-    })
-    .from(requestsTable)
-    .where(eq(requestsTable.providerPharmacyId, req.session.pharmacyId!))
-    .orderBy(desc(requestsTable.requestDate), desc(requestsTable.id));
-
-  const withNames = await Promise.all(requests.map(async (r) => {
-    const [requester] = await db.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, r.requesterPharmacyId));
-    const [provider] = await db.select({ name: pharmaciesTable.name }).from(pharmaciesTable).where(eq(pharmaciesTable.id, r.providerPharmacyId));
-    return {
-      ...r, requestDate: r.requestDate.toISOString(),
-      responseDate: r.responseDate ? r.responseDate.toISOString() : null,
-      requesterName: requester?.name ?? "", providerName: provider?.name ?? "",
-    };
-  }));
-  res.json(withNames);
+  await respondWithRequestList(req, res, requestsTable.providerPharmacyId);
 });
 
 router.post("/requests/:requestId/accept", requireApprovedPharmacy, async (req, res): Promise<void> => {

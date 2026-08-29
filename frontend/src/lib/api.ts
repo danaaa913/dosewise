@@ -98,8 +98,14 @@ export const api = {
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(data),
       }),
-    sent: () => request<ExchangeRequest[]>("/requests/sent"),
-    received: () => request<ExchangeRequest[]>("/requests/received"),
+    sent: (params?: RequestListParams) => {
+      const qs = buildRequestListQuery(params);
+      return request<RequestListResponse>(`/requests/sent${qs}`);
+    },
+    received: (params?: RequestListParams) => {
+      const qs = buildRequestListQuery(params);
+      return request<RequestListResponse>(`/requests/received${qs}`);
+    },
     accept: (requestId: number) =>
       request(`/requests/${requestId}/accept`, { method: "POST" }),
     reject: (requestId: number) =>
@@ -213,6 +219,27 @@ export interface ExchangeRequest {
   medicineName: string;
   requesterName: string;
   providerName: string;
+}
+
+export type RequestListParams = {
+  page?: number;
+  limit?: number;
+  status?: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "expired";
+};
+
+export interface RequestListResponse {
+  data: ExchangeRequest[];
+  pagination: { page: number; limit: number; total: number };
+  pending: number;
+}
+
+function buildRequestListQuery(params?: RequestListParams): string {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export interface SubscriptionStatus {
