@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ export default function LoginPage() {
         window.location.href = "/account-status";
       }
     } catch (err: any) {
-      setError(err.message || t.login.error);
+      setError(getErrorMessage(t, err, t.login.error));
     } finally {
       setLoading(false);
     }
@@ -159,6 +160,15 @@ export default function LoginPage() {
               className={cn("font-medium text-primary underline-offset-4 hover:underline", FOCUS_RING)}
             >
               {t.login.registerLink}
+            </Link>
+          </p>
+          <p className="mt-4 border-t border-border pt-4 text-center text-sm">
+            <Link
+              href="/admin/login"
+              className={cn("inline-flex items-center gap-1.5 font-medium text-brand-teal-deep underline-offset-4 hover:underline", FOCUS_RING)}
+            >
+              <ShieldCheck className="size-4" aria-hidden="true" />
+              {t.login.adminLogin}
             </Link>
           </p>
         </div>

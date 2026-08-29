@@ -135,6 +135,7 @@ export const translations = {
         received: "الطلبات الواردة",
         sent: "الطلبات المُرسلة",
       },
+      jod: "د.أ",
       status: {
         pending: "معلق",
         accepted: "مقبول",
@@ -142,6 +143,7 @@ export const translations = {
         cancelled: "ملغى",
         completed: "مكتمل",
         expired: "منتهي",
+        unknown: "غير معروف",
       },
       fields: {
         requester: "الطالب",
@@ -273,6 +275,7 @@ export const translations = {
         actions: "إجراءات",
         available: "متاح",
         unavailable: "غير متاح",
+        expired: "منتهي",
         edit: "تعديل",
         delete: "حذف",
         editAria: "تعديل {name}",
@@ -310,6 +313,7 @@ export const translations = {
         quantity: "الكمية المتاحة",
         price: "السعر",
         expires: "تنتهي الصلاحية",
+        expired: "منتهي الصلاحية",
         request: "طلب هذا الدواء",
         requestAria: "طلب دواء {name}",
       },
@@ -809,6 +813,7 @@ export const translations = {
         received: "Incoming requests",
         sent: "Sent requests",
       },
+      jod: "JOD",
       status: {
         pending: "Pending",
         accepted: "Accepted",
@@ -816,6 +821,7 @@ export const translations = {
         cancelled: "Cancelled",
         completed: "Completed",
         expired: "Expired",
+        unknown: "Unknown",
       },
       fields: {
         requester: "Requester",
@@ -947,6 +953,7 @@ export const translations = {
         actions: "Actions",
         available: "Available",
         unavailable: "Unavailable",
+        expired: "Expired",
         edit: "Edit",
         delete: "Delete",
         editAria: "Edit {name}",
@@ -984,6 +991,7 @@ export const translations = {
         quantity: "Available quantity",
         price: "Price",
         expires: "Expires",
+        expired: "Expired",
         request: "Request medicine",
         requestAria: "Request medicine {name}",
       },

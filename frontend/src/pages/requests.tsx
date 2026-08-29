@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { api, type ExchangeRequest } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useLanguage } from "@/i18n/LanguageContext";
 import type { Translations } from "@/i18n/translations";
 import { toast } from "@/hooks/use-toast";
@@ -83,27 +84,13 @@ const STATUS_META: Record<AllowableStatus, { key: AllowableStatus; cls: string }
   expired: { key: "expired", cls: "bg-slate-200 text-slate-500" },
 };
 
-const FALLBACK_STATUS: { key: AllowableStatus; cls: string } = {
-  key: "expired",
+const FALLBACK_STATUS: { key: "unknown"; cls: string } = {
+  key: "unknown",
   cls: "bg-slate-200 text-slate-500",
 };
 
 function requestErrorMessage(t: Translations, error: unknown): string {
-  const code = (error as { code?: string })?.code;
-  const known: Record<string, string> = {
-    REQUEST_NOT_FOUND: t.errorCodes.REQUEST_NOT_FOUND,
-    REQUEST_FORBIDDEN: t.errorCodes.REQUEST_FORBIDDEN,
-    REQUESTER_UNAVAILABLE: t.errorCodes.REQUESTER_UNAVAILABLE,
-    REQUEST_INVALID_STATE: t.errorCodes.REQUEST_INVALID_STATE,
-    MEDICINE_NOT_FOUND: t.errorCodes.MEDICINE_NOT_FOUND,
-    MEDICINE_UNAVAILABLE: t.errorCodes.MEDICINE_UNAVAILABLE,
-    MEDICINE_EXPIRED: t.errorCodes.MEDICINE_EXPIRED,
-    INSUFFICIENT_STOCK: t.errorCodes.INSUFFICIENT_STOCK,
-  };
-  if (code && known[code]) return known[code];
-  const message = error instanceof Error ? error.message : "";
-  if (/failed to fetch|network/i.test(message)) return t.requests.errors.network;
-  return t.requests.errors.generic;
+  return getErrorMessage(t, error, t.requests.errors.generic, t.requests.errors.network);
 }
 
 export default function RequestsPage() {
@@ -379,11 +366,11 @@ export default function RequestsPage() {
                     </span>
                     <span className="min-w-0">
                       <span className="text-slate-600 font-medium">{t.requests.fields.unitPrice}: </span>
-                      {priceFmt.format(Number(req.unitPrice))} {t.browse.jod}
+                      {priceFmt.format(Number(req.unitPrice))} {t.requests.jod}
                     </span>
                     <span className="min-w-0">
                       <span className="text-slate-600 font-medium">{t.requests.fields.total}: </span>
-                      {priceFmt.format(total)} {t.browse.jod}
+                      {priceFmt.format(total)} {t.requests.jod}
                     </span>
                   </div>
                   {req.responseDate && (

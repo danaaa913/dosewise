@@ -1,6 +1,7 @@
 ﻿import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/layout";
 import { api, formatPrice } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import {
   Pagination,
   PaginationContent,
@@ -62,7 +63,7 @@ export default function AdminDashboardPage() {
       setActionError("");
       qc.invalidateQueries({ queryKey: ["admin-pharmacies"] });
     },
-    onError: (e: Error) => setActionError(e.message || t.admin.errors.action),
+    onError: (e: Error) => setActionError(getErrorMessage(t, e, t.admin.errors.action)),
   });
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: api.admin.stats });

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ export default function AdminLoginPage() {
       await refresh();
       navigate("/admin/dashboard");
     } catch (err: any) {
-      setError(err.message || t.adminLogin.error);
+      setError(getErrorMessage(t, err, t.adminLogin.error));
     } finally {
       setLoading(false);
     }

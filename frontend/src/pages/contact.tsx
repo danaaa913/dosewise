@@ -86,8 +86,9 @@ export default function ContactPage() {
             <h3 className="text-base font-bold text-slate-800">أرسل لنا رسالة</h3>
 
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">الاسم</label>
+              <label htmlFor="contact-name" className="block text-xs font-medium text-slate-600 mb-1">الاسم</label>
               <input
+                id="contact-name"
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -95,8 +96,9 @@ export default function ContactPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">البريد الإلكتروني</label>
+              <label htmlFor="contact-email" className="block text-xs font-medium text-slate-600 mb-1">البريد الإلكتروني</label>
               <input
+                id="contact-email"
                 required
                 type="email"
                 value={form.email}
@@ -105,8 +107,9 @@ export default function ContactPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">الموضوع</label>
+              <label htmlFor="contact-subject" className="block text-xs font-medium text-slate-600 mb-1">الموضوع</label>
               <input
+                id="contact-subject"
                 required
                 value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
@@ -114,8 +117,9 @@ export default function ContactPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">الرسالة</label>
+              <label htmlFor="contact-message" className="block text-xs font-medium text-slate-600 mb-1">الرسالة</label>
               <textarea
+                id="contact-message"
                 required
                 rows={5}
                 value={form.message}

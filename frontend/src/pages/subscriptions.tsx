@@ -16,6 +16,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { api, type Plan } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useState } from "react";
 
@@ -47,7 +48,7 @@ export default function SubscriptionsPage() {
       setTimeout(() => setFeedback(""), 5000);
     },
     onError: (e: any) => {
-      setError(e.message ?? t.subscriptions.errors.action);
+      setError(getErrorMessage(t, e, t.subscriptions.errors.action));
       setTimeout(() => setError(""), 5000);
     },
   });

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api, type Medicine } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { cn } from "@/lib/utils";
+import { cn, isMedicineExpired } from "@/lib/utils";
 import { z } from "zod";
 
 type FormData = {
@@ -596,6 +596,11 @@ export default function MyMedicinesPage() {
                         <td className="px-5 py-3.5 text-muted-foreground">{priceFmt.format(Number(m.price))}</td>
                         <td className="px-5 py-3.5 text-muted-foreground">
                           {dateFmt.format(new Date(m.expiryDate + "T00:00:00Z"))}
+                          {isMedicineExpired(m.expiryDate) && (
+                            <span className="ms-2 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                              {t.myMedicines.table.expired}
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5">
                           <span
@@ -672,6 +677,11 @@ export default function MyMedicinesPage() {
                         <p className="text-muted-foreground">{t.myMedicines.table.expiry}</p>
                         <p className="font-medium text-brand-navy">
                           {dateFmt.format(new Date(m.expiryDate + "T00:00:00Z"))}
+                          {isMedicineExpired(m.expiryDate) && (
+                            <span className="ms-2 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                              {t.myMedicines.table.expired}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

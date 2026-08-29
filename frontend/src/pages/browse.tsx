@@ -39,6 +39,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { api, type AvailableMedicine } from "@/lib/api";
+import { isMedicineExpired } from "@/lib/utils";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -345,6 +346,11 @@ export default function BrowsePage() {
                       <p className="text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{t.browse.card.expires}:</span>{" "}
                         {dateFmt.format(new Date(m.expiryDate + "T00:00:00Z"))}
+                        {isMedicineExpired(m.expiryDate) && (
+                          <span className="ms-2 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                            {t.browse.card.expired}
+                          </span>
+                        )}
                       </p>
                       {m.description ? (
                         <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
