@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -21,10 +21,7 @@ import { Button } from "@/components/ui/button";
 import { api, type Notification, type NotificationType } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 function interpolate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => {
@@ -72,12 +69,16 @@ export default function NotificationsPage() {
   const { t, lang } = useLanguage();
 
   const locale = lang === "ar" ? "ar-JO" : "en-JO";
-  const numberFmt = new Intl.NumberFormat(locale);
-  const dateFmt = new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
+  const numberFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const dateFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      }),
+    [locale]
+  );
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["notifications", unreadOnly],

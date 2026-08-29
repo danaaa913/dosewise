@@ -1,7 +1,21 @@
 const API_BASE = "/api";
 
-export function formatPrice(value: string | number): string {
-  return Number(value).toFixed(2);
+const priceFormatters = new Map<string, Intl.NumberFormat>();
+
+function getPriceFormatter(locale: string): Intl.NumberFormat {
+  let fmt = priceFormatters.get(locale);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    priceFormatters.set(locale, fmt);
+  }
+  return fmt;
+}
+
+export function formatPrice(value: string | number, locale: string = "en-JO"): string {
+  return getPriceFormatter(locale).format(Number(value));
 }
 
 async function request<T>(
@@ -156,11 +170,6 @@ export const api = {
       request<{ forecasts: AiDemandForecast[] }>(
         `/ai/demand-forecast${medicine ? `?medicine=${encodeURIComponent(medicine)}` : ""}`,
       ),
-    chat: (message: string) =>
-      request<{ response: string; suggestions: string[] }>("/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({ message }),
-      }),
   },
 };
 

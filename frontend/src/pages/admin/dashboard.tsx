@@ -2,6 +2,7 @@
 import { AdminLayout } from "@/components/layout";
 import { api, formatPrice } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { PAGE_SIZE, buildPageItems } from "@/lib/pagination";
 import {
   Pagination,
   PaginationContent,
@@ -22,21 +23,8 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState, useEffect } from "react";
-
-const PAGE_SIZE = 20;
-
-function range(start: number, end: number): number[] {
-  const len = end - start + 1;
-  return Array.from({ length: len }, (_, i) => start + i);
-}
-
-function buildPageItems(current: number, totalPages: number): (number | "…")[] {
-  if (totalPages <= 7) return range(1, totalPages);
-  if (current <= 4) return [...range(1, 5), "…", totalPages];
-  if (current >= totalPages - 3) return [1, "…", ...range(totalPages - 4, totalPages)];
-  return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
-}
 
 const VERIFICATION_BADGES: Record<string, { cls: string }> = {
   pending: { cls: "bg-amber-100 text-amber-700" },
@@ -45,7 +33,8 @@ const VERIFICATION_BADGES: Record<string, { cls: string }> = {
 };
 
 export default function AdminDashboardPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
   const [tab, setTab] = useState<"overview" | "pharmacies" | "medicines">("overview");
   const [pharmaciesPage, setPharmaciesPage] = useState(1);
   const [medicinesPage, setMedicinesPage] = useState(1);
@@ -142,7 +131,9 @@ export default function AdminDashboardPage() {
       {tab === "pharmacies" && (
         <div className="space-y-3">
           {actionError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{actionError}</div>
+            <Alert variant="destructive">
+              <AlertDescription>{actionError}</AlertDescription>
+            </Alert>
           )}
           <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
           <table className="w-full text-sm">
@@ -300,7 +291,7 @@ export default function AdminDashboardPage() {
                   <td className="px-4 py-3 text-slate-600">{m.pharmacyName}</td>
                   <td className="px-4 py-3 text-slate-500">{m.pharmacyCity}</td>
                   <td className="px-4 py-3 text-slate-600">{m.quantity}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatPrice(m.price)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatPrice(m.price, locale)}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{m.expiryDate}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${

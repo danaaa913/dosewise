@@ -12,10 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Logo } from "@/components/Logo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 export default function AdminLoginPage() {
   const [, navigate] = useLocation();

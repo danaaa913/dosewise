@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,16 +18,13 @@ import {
   Clock3,
   CircleAlert,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { pharmacy } = useAuth();
   const { t, lang } = useLanguage();
   const locale = lang === "ar" ? "ar-JO" : "en-JO";
-  const numberFormatter = new Intl.NumberFormat(locale);
+  const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
   const [isRetrying, setIsRetrying] = useState(false);
 
   const {

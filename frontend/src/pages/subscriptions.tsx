@@ -3,7 +3,7 @@ import { CreditCard } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -18,7 +18,7 @@ import {
 import { api, type Plan } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 export default function SubscriptionsPage() {
   const qc = useQueryClient();
@@ -28,7 +28,7 @@ export default function SubscriptionsPage() {
   const { t, lang } = useLanguage();
 
   const locale = lang === "ar" ? "ar-JO" : "en-JO";
-  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const dateFmt = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }), [locale]);
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["sub-status"],
@@ -100,9 +100,9 @@ export default function SubscriptionsPage() {
         </div>
       )}
       {error && (
-        <div className="mb-5 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-5">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Current status */}

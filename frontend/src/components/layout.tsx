@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeftRight,
@@ -16,7 +16,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, FOCUS_RING } from "@/lib/utils";
 import { Logo } from "./Logo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
@@ -60,9 +60,6 @@ const SECONDARY_ICONS: Record<string, typeof Info> = {
   "/contact": Mail,
 };
 
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
 interface LayoutProps {
   children: React.ReactNode;
   title: string;
@@ -105,7 +102,10 @@ function NavContent({
   const { pharmacy, logout } = useAuth();
   const { t, lang } = useLanguage();
   const unreadCount = useUnreadCount();
-  const numberFmt = new Intl.NumberFormat(lang === "ar" ? "ar-JO" : "en-JO");
+  const numberFmt = useMemo(
+    () => new Intl.NumberFormat(lang === "ar" ? "ar-JO" : "en-JO"),
+    [lang]
+  );
 
   const linkCls = (active: boolean) =>
     cn(

@@ -9,7 +9,8 @@ import { useLanguage } from "@/i18n/LanguageContext";
 type AnalyticsTab = "recommendations" | "suggestions" | "prices" | "forecast";
 
 export default function AnalyticsPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const locale = lang === "ar" ? "ar-JO" : "en-JO";
   const [tab, setTab] = useState<AnalyticsTab>("recommendations");
   const [selectedMedicine, setSelectedMedicine] = useState<string>("");
 
@@ -178,7 +179,7 @@ export default function AnalyticsPage() {
               <p className="font-semibold text-slate-800 text-sm mb-2">{p.medicine}</p>
               <div className="flex items-center gap-4 mb-2">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-slate-500">{formatPrice(p.currentPrice)}</div>
+                  <div className="text-lg font-bold text-slate-500">{formatPrice(p.currentPrice, locale)}</div>
                   <div className="text-xs text-slate-400">{t.analytics.currentPrice}</div>
                 </div>
                 <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -188,7 +189,7 @@ export default function AnalyticsPage() {
                   <div className={`text-lg font-bold ${
                     p.suggestedPrice > p.currentPrice ? "text-emerald-600" : "text-blue-600"
                   }`}>
-                    {formatPrice(p.suggestedPrice)}
+                    {formatPrice(p.suggestedPrice, locale)}
                   </div>
                   <div className="text-xs text-slate-400">{t.analytics.suggestedPrice}</div>
                 </div>

@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from "react";
+﻿import { useRef, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pill, Plus } from "lucide-react";
 import { Layout } from "@/components/layout";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api, type Medicine } from "@/lib/api";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { cn, isMedicineExpired } from "@/lib/utils";
+import { cn, isMedicineExpired, FOCUS_RING } from "@/lib/utils";
 import { z } from "zod";
 
 type FormData = {
@@ -120,9 +120,6 @@ function getUpdateSchema(t: any) {
     .refine((data) => Object.keys(data).length > 0, { message: t.myMedicines.errors.generic });
 }
 
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
 export default function MyMedicinesPage() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -133,9 +130,15 @@ export default function MyMedicinesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Medicine | null>(null);
   const { t, lang } = useLanguage();
   const locale = lang === "ar" ? "ar-JO" : "en-JO";
-  const numberFmt = new Intl.NumberFormat(locale);
-  const priceFmt = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
+  const numberFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const priceFmt = useMemo(
+    () => new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    [locale]
+  );
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }),
+    [locale]
+  );
 
   const openerRef = useRef<HTMLElement | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);

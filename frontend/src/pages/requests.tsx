@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Inbox, Send } from "lucide-react";
 import { Layout } from "@/components/layout";
@@ -33,27 +33,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api, type ExchangeRequest } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { PAGE_SIZE, buildPageItems } from "@/lib/pagination";
 import { useLanguage } from "@/i18n/LanguageContext";
 import type { Translations } from "@/i18n/translations";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
-const PAGE_SIZE = 20;
-
-function range(start: number, end: number): number[] {
-  const len = end - start + 1;
-  return Array.from({ length: len }, (_, i) => start + i);
-}
-
-function buildPageItems(current: number, totalPages: number): (number | "…")[] {
-  if (totalPages <= 7) return range(1, totalPages);
-  if (current <= 4) return [...range(1, 5), "…", totalPages];
-  if (current >= totalPages - 3) return [1, "…", ...range(totalPages - 4, totalPages)];
-  return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
-}
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 type TabKey = "received" | "sent";
 
@@ -97,12 +81,19 @@ export default function RequestsPage() {
   const qc = useQueryClient();
   const { t, lang } = useLanguage();
   const locale = lang === "ar" ? "ar-JO" : "en-JO";
-  const numberFmt = new Intl.NumberFormat(locale);
-  const priceFmt = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
+  const numberFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const priceFmt = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [locale]
+  );
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }),
+    [locale]
+  );
 
   const [tab, setTab] = useState<TabKey>(parseTabFromUrl);
   const [pages, setPages] = useState<Record<TabKey, number>>({ received: 1, sent: 1 });
