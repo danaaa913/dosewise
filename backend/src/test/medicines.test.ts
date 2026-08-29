@@ -75,7 +75,7 @@ describe("INV-005: marketplace hides expired and zero-stock listings", () => {
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
 
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).toContain(valid.id);
     expect(ids).not.toContain(expired.id);
     expect(ids).not.toContain(empty.id);
@@ -86,7 +86,7 @@ describe("INV-005: marketplace hides expired and zero-stock listings", () => {
     const medicine = await addMedicine(owner.agent, { quantity: 5 });
 
     const res = await owner.agent.get("/api/medicines/available");
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).not.toContain(medicine.id);
   });
 });
@@ -334,7 +334,7 @@ describe("INV-005b: marketplace excludes unapproved or inactive providers", () =
 
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).not.toContain(medicine.id);
   });
 
@@ -345,7 +345,7 @@ describe("INV-005b: marketplace excludes unapproved or inactive providers", () =
 
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).toContain(medicine.id);
   });
 });
@@ -362,7 +362,7 @@ describe("EXP-002: market expiry boundary — expiring today is still valid", ()
     const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: yesterday });
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    expect(res.body.map((m: { id: number }) => m.id)).not.toContain(med.id);
+    expect(res.body.data.map((m: { id: number }) => m.id)).not.toContain(med.id);
   });
 
   it("lists a listing expiring today", async () => {
@@ -371,7 +371,7 @@ describe("EXP-002: market expiry boundary — expiring today is still valid", ()
     const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: today });
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    expect(res.body.map((m: { id: number }) => m.id)).toContain(med.id);
+    expect(res.body.data.map((m: { id: number }) => m.id)).toContain(med.id);
   });
 
   it("lists a listing expiring tomorrow", async () => {
@@ -380,7 +380,7 @@ describe("EXP-002: market expiry boundary — expiring today is still valid", ()
     const med = await addMedicine(owner.agent, { quantity: 5, expiryDate: tomorrow });
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    expect(res.body.map((m: { id: number }) => m.id)).toContain(med.id);
+    expect(res.body.data.map((m: { id: number }) => m.id)).toContain(med.id);
   });
 });
 
@@ -395,7 +395,7 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     const idx = (id: number) => ids.indexOf(id);
     expect(idx(earliest.id)).toBeLessThan(idx(middle.id));
     expect(idx(middle.id)).toBeLessThan(idx(latest.id));
@@ -410,7 +410,7 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     const idx = (id: number) => ids.indexOf(id);
     expect(idx(alpha.id)).toBeLessThan(idx(zeta.id));
   });
@@ -424,7 +424,7 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     const idx = (id: number) => ids.indexOf(id);
     expect(idx(first.id)).toBeLessThan(idx(second.id));
   });
@@ -440,7 +440,7 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get(`/api/medicines/available?search=${encodeURIComponent(query)}`);
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).toContain(med.id);
   });
 
@@ -451,7 +451,7 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get(`/api/medicines/available?search=${encodeURIComponent("   Ibuprofen   ")}`);
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).toContain(med.id);
   });
 
@@ -466,11 +466,63 @@ describe("SORT-001: deterministic marketplace ordering", () => {
 
     const res = await viewer.agent.get("/api/medicines/available?search=Ibuprofen");
     expect(res.status).toBe(200);
-    const ids: number[] = res.body.map((m: { id: number }) => m.id);
+    const ids: number[] = res.body.data.map((m: { id: number }) => m.id);
     expect(ids).toContain(valid.id);
     expect(ids).not.toContain(expired.id);
     expect(ids).not.toContain(empty.id);
     expect(ids).not.toContain(own.id);
+  });
+});
+
+describe("PERF-003: marketplace pagination", () => {
+  it("returns { data, pagination } with a matching total and ordered pages", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const token = `PAG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const a = await addMedicine(owner.agent, { quantity: 5, name: `${token} Alpha` });
+    const b = await addMedicine(owner.agent, { quantity: 5, name: `${token} Beta` });
+
+    const pageOne = await viewer.agent.get(
+      `/api/medicines/available?search=${encodeURIComponent(token)}&page=1&limit=1`
+    );
+    expect(pageOne.status).toBe(200);
+    expect(Array.isArray(pageOne.body.data)).toBe(true);
+    expect(pageOne.body.data).toHaveLength(1);
+    expect(pageOne.body.pagination).toEqual({ page: 1, limit: 1, total: 2 });
+    expect(pageOne.body.data[0].id).toBe(a.id);
+
+    const pageTwo = await viewer.agent.get(
+      `/api/medicines/available?search=${encodeURIComponent(token)}&page=2&limit=1`
+    );
+    expect(pageTwo.body.data).toHaveLength(1);
+    expect(pageTwo.body.data[0].id).toBe(b.id);
+  });
+
+  it("applies search before pagination and reports the filtered total", async () => {
+    const owner = await registerPharmacy();
+    const viewer = await registerPharmacy();
+    const token = `SRC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const target = await addMedicine(owner.agent, { quantity: 5, name: `${token} Ibuprofen` });
+    await addMedicine(owner.agent, { quantity: 5, name: `${token} Vitamin` });
+
+    const res = await viewer.agent.get(
+      `/api/medicines/available?search=${encodeURIComponent(`${token} ibuprofen`)}&page=1&limit=1`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.total).toBe(1);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(target.id);
+  });
+
+  it("clamps limit into the 1..100 range", async () => {
+    const viewer = await registerPharmacy();
+    const hi = await viewer.agent.get("/api/medicines/available?page=1&limit=999");
+    expect(hi.status).toBe(200);
+    expect(hi.body.pagination.limit).toBe(100);
+
+    const lo = await viewer.agent.get("/api/medicines/available?limit=0");
+    expect(lo.status).toBe(200);
+    expect(lo.body.pagination.limit).toBe(1);
   });
 });
 

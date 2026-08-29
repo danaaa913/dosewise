@@ -63,10 +63,16 @@ export const api = {
       isAvailable?: boolean;
     }) => request("/medicines/add", { method: "POST", body: JSON.stringify(data) }),
     my: () => request<Medicine[]>("/medicines/my"),
-    available: (search?: string) =>
-      request<AvailableMedicine[]>(
-        `/medicines/available${search ? `?search=${encodeURIComponent(search)}` : ""}`
-      ),
+    available: (params?: { search?: string; page?: number; limit?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.search) query.set("search", params.search);
+      if (params?.page) query.set("page", String(params.page));
+      if (params?.limit) query.set("limit", String(params.limit));
+      const qs = query.toString();
+      return request<AvailableMedicinesResponse>(
+        `/medicines/available${qs ? `?${qs}` : ""}`
+      );
+    },
     update: (
       medicineId: number,
       data: Partial<{
@@ -187,6 +193,11 @@ export interface Medicine {
 export interface AvailableMedicine extends Medicine {
   pharmacyName: string;
   pharmacyCity: string;
+}
+
+export interface AvailableMedicinesResponse {
+  data: AvailableMedicine[];
+  pagination: { page: number; limit: number; total: number };
 }
 
 export interface ExchangeRequest {

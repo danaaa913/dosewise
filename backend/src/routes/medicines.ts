@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, medicinesTable, pharmaciesTable } from "../db/index.js";
-import { eq, and, asc, gt, gte, ne } from "drizzle-orm";
+import { eq, and, asc, count, gt, gte, ilike, ne } from "drizzle-orm";
 import { AddMedicineBody, UpdateMedicineBody, UpdateMedicineParams, DeleteMedicineParams } from "../zod/schemas.js";
 import { requireApprovedPharmacy } from "../middlewares/require-approved-pharmacy.js";
 import { todayUtc } from "../lib/expiry.js";
@@ -9,6 +9,10 @@ import { logAudit } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 
 router.post("/medicines/add", requireApprovedPharmacy, async (req, res): Promise<void> => {
   const parsed = AddMedicineBody.safeParse(req.body);
@@ -49,7 +53,29 @@ router.get("/medicines/my", requireApprovedPharmacy, async (req, res): Promise<v
 });
 
 router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Promise<void> => {
-  const search = req.query.search as string | undefined;
+  const page = Number.isFinite(Number(req.query.page)) ? Math.max(1, Math.floor(Number(req.query.page))) : 1;
+  const limit = Number.isFinite(Number(req.query.limit))
+    ? Math.min(100, Math.max(1, Math.floor(Number(req.query.limit))))
+    : 20;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+  const conditions = [
+    eq(medicinesTable.isAvailable, true),
+    gt(medicinesTable.quantity, 0),
+    gte(medicinesTable.expiryDate, todayUtc()),
+    eq(pharmaciesTable.verificationStatus, "approved"),
+    eq(pharmaciesTable.isActive, true),
+    ne(medicinesTable.pharmacyId, req.session.pharmacyId!),
+  ];
+  if (search) {
+    conditions.push(ilike(medicinesTable.name, `%${escapeLike(search)}%`));
+  }
+
+  const [{ count: total }] = await db.select({ count: count() })
+    .from(medicinesTable)
+    .innerJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
+    .where(and(...conditions));
+
   const medicines = await db
     .select({
       id: medicinesTable.id, pharmacyId: medicinesTable.pharmacyId,
@@ -60,29 +86,23 @@ router.get("/medicines/available", requireApprovedPharmacy, async (req, res): Pr
     })
     .from(medicinesTable)
     .innerJoin(pharmaciesTable, eq(medicinesTable.pharmacyId, pharmaciesTable.id))
-    .where(and(
-      eq(medicinesTable.isAvailable, true),
-      gt(medicinesTable.quantity, 0),
-      gte(medicinesTable.expiryDate, todayUtc()),
-      eq(pharmaciesTable.verificationStatus, "approved"),
-      eq(pharmaciesTable.isActive, true),
-      ne(medicinesTable.pharmacyId, req.session.pharmacyId!),
-    ))
+    .where(and(...conditions))
     .orderBy(
       asc(medicinesTable.expiryDate),
       asc(medicinesTable.name),
       asc(medicinesTable.id),
-    );
+    )
+    .limit(limit)
+    .offset((page - 1) * limit);
 
-  const searched = search
-    ? medicines.filter(m => m.name.toLowerCase().includes(search.trim().toLowerCase()))
-    : medicines;
-
-  res.json(searched.map(m => ({
-    id: m.id, pharmacyId: m.pharmacyId, name: m.name, quantity: m.quantity,
-    price: m.price, expiryDate: m.expiryDate, description: m.description ?? null,
-    isAvailable: m.isAvailable, pharmacyName: m.pharmacyName ?? "", pharmacyCity: m.pharmacyCity ?? "",
-  })));
+  res.json({
+    data: medicines.map(m => ({
+      id: m.id, pharmacyId: m.pharmacyId, name: m.name, quantity: m.quantity,
+      price: m.price, expiryDate: m.expiryDate, description: m.description ?? null,
+      isAvailable: m.isAvailable, pharmacyName: m.pharmacyName ?? "", pharmacyCity: m.pharmacyCity ?? "",
+    })),
+    pagination: { page, limit, total },
+  });
 });
 
 router.put("/medicines/:medicineId/update", requireApprovedPharmacy, async (req, res): Promise<void> => {

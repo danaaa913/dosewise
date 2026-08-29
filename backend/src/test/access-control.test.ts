@@ -85,7 +85,8 @@ describe("PHM-004: unified operational access gate (requireApprovedPharmacy)", (
     await setVerification(pharmacyId, "approved");
     const res = await agent.get("/api/medicines/available");
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.pagination).toHaveProperty("total");
   });
 
   it("admin session is not treated as a pharmacy", async () => {

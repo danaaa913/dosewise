@@ -1,8 +1,17 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Package, Search, SearchX, X } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
   Empty,
   EmptyMedia,
@@ -35,6 +44,19 @@ import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 
 const DEBOUNCE_MS = 350;
+const PAGE_SIZE = 20;
+
+function range(start: number, end: number): number[] {
+  const len = end - start + 1;
+  return Array.from({ length: len }, (_, i) => start + i);
+}
+
+function buildPageItems(current: number, totalPages: number): (number | "…")[] {
+  if (totalPages <= 7) return range(1, totalPages);
+  if (current <= 4) return [...range(1, 5), "…", totalPages];
+  if (current >= totalPages - 3) return [1, "…", ...range(totalPages - 4, totalPages)];
+  return [1, "…", ...range(current - 1, current + 1), "…", totalPages];
+}
 
 function buildQtySchema(t: ReturnType<typeof useLanguage>["t"], maxQty: number, numberFmt: Intl.NumberFormat) {
   return z.any().superRefine((v: unknown, ctx) => {
@@ -81,6 +103,7 @@ export default function BrowsePage() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AvailableMedicine | null>(null);
   const [qty, setQty] = useState("1");
   const [qtyError, setQtyError] = useState("");
@@ -95,10 +118,23 @@ export default function BrowsePage() {
     return () => window.clearTimeout(id);
   }, [search]);
 
-  const { data: medicines, isPending, isError, refetch } = useQuery({
-    queryKey: ["available-medicines", debouncedSearch],
-    queryFn: () => api.medicines.available(debouncedSearch || undefined),
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: ["available-medicines", debouncedSearch, page],
+    queryFn: () => api.medicines.available({ search: debouncedSearch || undefined, page, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   });
+
+  const medicines = data?.data;
+  const total = data?.pagination.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const closeDialog = () => {
     setSelected(null);
@@ -173,11 +209,11 @@ export default function BrowsePage() {
   };
 
   const trimmed = debouncedSearch;
-  const hasData = medicines !== undefined;
-  const isInitialLoading = isPending && medicines === undefined;
-  const isInitialError = isError && medicines === undefined;
-  const isEmptyMarket = hasData && !isError && medicines.length === 0 && !trimmed;
-  const isNoResults = hasData && !isError && medicines.length === 0 && !!trimmed;
+  const hasData = data !== undefined;
+  const isInitialLoading = isPending && data === undefined;
+  const isInitialError = isError && data === undefined;
+  const isEmptyMarket = hasData && !isError && total === 0 && !trimmed;
+  const isNoResults = hasData && !isError && total === 0 && !!trimmed;
 
   return (
     <Layout title={t.browse.title}>
@@ -215,7 +251,7 @@ export default function BrowsePage() {
         <div className="space-y-4">
           {hasData && !isInitialError && (
             <p role="status" className="text-sm text-muted-foreground">
-              {t.browse.count.replace("{count}", numberFmt.format(medicines.length))}
+              {t.browse.count.replace("{count}", numberFmt.format(total))}
             </p>
           )}
 
@@ -273,7 +309,7 @@ export default function BrowsePage() {
             </Empty>
           )}
 
-          {hasData && !isInitialError && medicines.length > 0 && (
+          {hasData && !isInitialError && (medicines?.length ?? 0) > 0 && (
             <>
               {isError && (
                 <Alert variant="destructive">
@@ -281,7 +317,7 @@ export default function BrowsePage() {
                 </Alert>
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {medicines.map((m) => (
+                {medicines!.map((m) => (
                   <Card key={m.id} className="flex min-w-0 flex-col">
                     <CardHeader className="p-5 pb-0">
                       <div className="flex items-start justify-between gap-3">
@@ -331,6 +367,52 @@ export default function BrowsePage() {
                   </Card>
                 ))}
               </div>
+              {total > PAGE_SIZE && (
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (page > 1) setPage(page - 1);
+                        }}
+                        className={page <= 1 ? "pointer-events-none opacity-50" : undefined}
+                      />
+                    </PaginationItem>
+                    {buildPageItems(page, totalPages).map((item, index) =>
+                      item === "…" ? (
+                        <PaginationItem key={`ellipsis-${index}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={item}>
+                          <PaginationLink
+                            href="#"
+                            isActive={item === page}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setPage(item);
+                            }}
+                          >
+                            {item}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (page < totalPages) setPage(page + 1);
+                        }}
+                        className={page >= totalPages ? "pointer-events-none opacity-50" : undefined}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
             </>
           )}
         </div>
